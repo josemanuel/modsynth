@@ -1,0 +1,212 @@
+{
+  "name": "Mini-Moog-ish",
+  "description": "3\u00d7VCO \u2192 Mixer \u2192 VCF \u2192 VCA + ADSR (estilo sustractivo cl\u00e1sico)",
+  "modules": [
+    {
+      "id": "vco1",
+      "type": "vco",
+      "x": 0,
+      "y": 0,
+      "params": {
+        "waveform": "sawtooth",
+        "frequency": 110
+      }
+    },
+    {
+      "id": "vco2",
+      "type": "vco",
+      "x": 0,
+      "y": 160,
+      "params": {
+        "waveform": "sawtooth",
+        "frequency": 110,
+        "detune": 7
+      }
+    },
+    {
+      "id": "vco3",
+      "type": "vco",
+      "x": 0,
+      "y": 320,
+      "params": {
+        "waveform": "square",
+        "frequency": 55
+      }
+    },
+    {
+      "id": "mix",
+      "type": "mixer",
+      "x": 220,
+      "y": 120,
+      "params": {
+        "level1": 0.7,
+        "level2": 0.5,
+        "level3": 0.35,
+        "master": 0.85
+      }
+    },
+    {
+      "id": "vcf",
+      "type": "vcf",
+      "x": 420,
+      "y": 100,
+      "params": {}
+    },
+    {
+      "id": "adsr",
+      "type": "adsr",
+      "x": 420,
+      "y": 300,
+      "params": {
+        "attack": 0.02,
+        "decay": 0.2,
+        "sustain": 0.6,
+        "release": 0.4
+      }
+    },
+    {
+      "id": "vca",
+      "type": "vca",
+      "x": 620,
+      "y": 140,
+      "params": {
+        "gain": 0.85
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "vco1:out",
+      "to": "mix:in1"
+    },
+    {
+      "from": "vco2:out",
+      "to": "mix:in2"
+    },
+    {
+      "from": "vco3:out",
+      "to": "mix:in3"
+    },
+    {
+      "from": "mix:out",
+      "to": "vcf:in"
+    },
+    {
+      "from": "vcf:out",
+      "to": "vca:in"
+    },
+    {
+      "from": "adsr:out",
+      "to": "vca:cv"
+    }
+  ],
+  "expose": [
+    {
+      "id": "freq",
+      "name": "Freq",
+      "type": "cv",
+      "direction": "in",
+      "target": "vco1:freq"
+    },
+    {
+      "id": "freq2",
+      "name": "Freq2",
+      "type": "cv",
+      "direction": "in",
+      "target": "vco2:freq"
+    },
+    {
+      "id": "freq3",
+      "name": "Freq3",
+      "type": "cv",
+      "direction": "in",
+      "target": "vco3:freq"
+    },
+    {
+      "id": "gate",
+      "name": "Gate",
+      "type": "gate",
+      "direction": "in",
+      "target": "adsr:gate"
+    },
+    {
+      "id": "out",
+      "name": "Out",
+      "type": "audio",
+      "direction": "out",
+      "target": "vca:out"
+    }
+  ],
+  "macros": [
+    {
+      "id": "cut",
+      "label": "Cutoff",
+      "min": 20,
+      "max": 12000,
+      "step": 1,
+      "value": 2000,
+      "target": "vcf",
+      "param": "frequency"
+    },
+    {
+      "id": "res",
+      "label": "Resonance",
+      "min": 0,
+      "max": 20,
+      "step": 0.1,
+      "value": 2,
+      "target": "vcf",
+      "param": "Q"
+    },
+    {
+      "id": "mix1",
+      "label": "Osc1",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "value": 0.7,
+      "target": "mix",
+      "param": "level1"
+    },
+    {
+      "id": "mix2",
+      "label": "Osc2",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "value": 0.5,
+      "target": "mix",
+      "param": "level2"
+    },
+    {
+      "id": "mix3",
+      "label": "Osc3",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "value": 0.35,
+      "target": "mix",
+      "param": "level3"
+    }
+  ],
+  "panel": {
+    "theme": "wood",
+    "sections": [
+      {
+        "title": "OSCILLATOR BANK",
+        "macros": [
+          "mix1",
+          "mix2",
+          "mix3"
+        ]
+      },
+      {
+        "title": "FILTER",
+        "macros": [
+          "cut",
+          "res"
+        ]
+      }
+    ]
+  }
+}

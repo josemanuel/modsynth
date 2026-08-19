@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "name": "Arpegiador",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 20,
+      "y": 180,
+      "params": {
+        "octave": 0
+      }
+    },
+    {
+      "id": "arp1",
+      "type": "arp",
+      "x": 280,
+      "y": 40,
+      "params": {}
+    },
+    {
+      "id": "vco1",
+      "type": "vco",
+      "x": 520,
+      "y": 40,
+      "params": {
+        "waveform": "square",
+        "frequency": 220
+      }
+    },
+    {
+      "id": "adsr1",
+      "type": "adsr",
+      "x": 520,
+      "y": 280,
+      "params": {
+        "attack": 0.01,
+        "decay": 0.12,
+        "sustain": 0.2,
+        "release": 0.15
+      }
+    },
+    {
+      "id": "vca1",
+      "type": "vca",
+      "x": 760,
+      "y": 120,
+      "params": {
+        "gain": 0.85
+      }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 980,
+      "y": 140,
+      "params": {
+        "volume": 0.7
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "arp1:cv",
+      "to": "vco1:freq"
+    },
+    {
+      "from": "arp1:gate",
+      "to": "adsr1:gate"
+    },
+    {
+      "from": "vco1:out",
+      "to": "vca1:in"
+    },
+    {
+      "from": "adsr1:out",
+      "to": "vca1:cv"
+    },
+    {
+      "from": "vca1:out",
+      "to": "out1:in"
+    }
+  ]
+}

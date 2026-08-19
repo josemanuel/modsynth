@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "name": "Cadena de efectos",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 20,
+      "y": 80,
+      "params": { "octave": 0 }
+    },
+    {
+      "id": "vco1",
+      "type": "vco",
+      "x": 300,
+      "y": 30,
+      "params": { "waveform": "triangle", "frequency": 220, "detune": 0, "pw": 0.5 }
+    },
+    {
+      "id": "adsr1",
+      "type": "adsr",
+      "x": 300,
+      "y": 280,
+      "params": { "attack": 0.08, "decay": 0.3, "sustain": 0.5, "release": 0.6 }
+    },
+    {
+      "id": "vca1",
+      "type": "vca",
+      "x": 520,
+      "y": 80,
+      "params": { "gain": 0.8 }
+    },
+    {
+      "id": "delay1",
+      "type": "delay",
+      "x": 740,
+      "y": 30,
+      "params": { "time": 0.28, "feedback": 0.35, "mix": 0.3 }
+    },
+    {
+      "id": "chorus1",
+      "type": "chorus",
+      "x": 740,
+      "y": 250,
+      "params": { "rate": 1.2, "depth": 0.004, "mix": 0.4 }
+    },
+    {
+      "id": "reverb1",
+      "type": "reverb",
+      "x": 980,
+      "y": 120,
+      "params": { "decay": 2.8, "mix": 0.3 }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 1200,
+      "y": 140,
+      "params": { "volume": 0.65 }
+    }
+  ],
+  "wires": [
+    { "from": "kb1:cv", "to": "vco1:freq" },
+    { "from": "kb1:gate", "to": "adsr1:gate" },
+    { "from": "vco1:out", "to": "vca1:in" },
+    { "from": "adsr1:out", "to": "vca1:cv" },
+    { "from": "vca1:out", "to": "delay1:in" },
+    { "from": "delay1:out", "to": "chorus1:in" },
+    { "from": "chorus1:out", "to": "reverb1:in" },
+    { "from": "reverb1:out", "to": "out1:in" }
+  ]
+}

@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "name": "Polifon\u00eda 2 voces",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 20,
+      "y": 420,
+      "params": {
+        "octave": 0,
+        "hold": false,
+        "pcKeys": true
+      }
+    },
+    {
+      "id": "voc1",
+      "type": "voices",
+      "x": 20,
+      "y": 40,
+      "params": {
+        "numVoices": 2,
+        "steal": "oldest"
+      }
+    },
+    {
+      "id": "vco1",
+      "type": "vco",
+      "x": 260,
+      "y": 20,
+      "params": {
+        "waveform": "sawtooth",
+        "frequency": 220,
+        "detune": 0,
+        "ring": 0,
+        "ringRatio": 1
+      }
+    },
+    {
+      "id": "vco2",
+      "type": "vco",
+      "x": 260,
+      "y": 240,
+      "params": {
+        "waveform": "sawtooth",
+        "frequency": 220,
+        "detune": 0,
+        "ring": 0,
+        "ringRatio": 1
+      }
+    },
+    {
+      "id": "adsr1",
+      "type": "adsr",
+      "x": 460,
+      "y": 20,
+      "params": {
+        "attack": 0.02,
+        "decay": 0.15,
+        "sustain": 0.5,
+        "release": 0.3
+      }
+    },
+    {
+      "id": "adsr2",
+      "type": "adsr",
+      "x": 460,
+      "y": 240,
+      "params": {
+        "attack": 0.02,
+        "decay": 0.15,
+        "sustain": 0.5,
+        "release": 0.3
+      }
+    },
+    {
+      "id": "vca1",
+      "type": "vca",
+      "x": 660,
+      "y": 40,
+      "params": {
+        "gain": 0.45
+      }
+    },
+    {
+      "id": "vca2",
+      "type": "vca",
+      "x": 660,
+      "y": 260,
+      "params": {
+        "gain": 0.45
+      }
+    },
+    {
+      "id": "mix1",
+      "type": "mixer",
+      "x": 860,
+      "y": 140,
+      "params": {
+        "level1": 0.8,
+        "level2": 0.8,
+        "level3": 0,
+        "master": 0.8
+      }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 1040,
+      "y": 160,
+      "params": {
+        "volume": 0.7
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "voc1:cv1",
+      "to": "vco1:freq"
+    },
+    {
+      "from": "voc1:gate1",
+      "to": "adsr1:gate"
+    },
+    {
+      "from": "vco1:out",
+      "to": "vca1:in"
+    },
+    {
+      "from": "adsr1:out",
+      "to": "vca1:cv"
+    },
+    {
+      "from": "voc1:cv2",
+      "to": "vco2:freq"
+    },
+    {
+      "from": "voc1:gate2",
+      "to": "adsr2:gate"
+    },
+    {
+      "from": "vco2:out",
+      "to": "vca2:in"
+    },
+    {
+      "from": "adsr2:out",
+      "to": "vca2:cv"
+    },
+    {
+      "from": "vca1:out",
+      "to": "mix1:in1"
+    },
+    {
+      "from": "vca2:out",
+      "to": "mix1:in2"
+    },
+    {
+      "from": "mix1:out",
+      "to": "out1:in"
+    }
+  ]
+}

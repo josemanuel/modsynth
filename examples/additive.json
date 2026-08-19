@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "name": "Additive Fourier",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 30,
+      "y": 80,
+      "params": {
+        "octave": 0
+      }
+    },
+    {
+      "id": "add1",
+      "type": "additive",
+      "x": 300,
+      "y": 40,
+      "params": {
+        "frequency": 110,
+        "partials": 8,
+        "stretch": 1,
+        "inharm": 0
+      }
+    },
+    {
+      "id": "adsr1",
+      "type": "adsr",
+      "x": 300,
+      "y": 320,
+      "params": {
+        "attack": 0.05,
+        "decay": 0.2,
+        "sustain": 0.5,
+        "release": 0.4
+      }
+    },
+    {
+      "id": "vca1",
+      "type": "vca",
+      "x": 560,
+      "y": 140,
+      "params": {
+        "gain": 0.8
+      }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 780,
+      "y": 160,
+      "params": {
+        "volume": 0.7
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "kb1:cv",
+      "to": "add1:freq"
+    },
+    {
+      "from": "kb1:gate",
+      "to": "adsr1:gate"
+    },
+    {
+      "from": "add1:out",
+      "to": "vca1:in"
+    },
+    {
+      "from": "adsr1:out",
+      "to": "vca1:cv"
+    },
+    {
+      "from": "vca1:out",
+      "to": "out1:in"
+    }
+  ]
+}

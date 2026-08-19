@@ -1,0 +1,82 @@
+{
+  "examples": [
+    {
+      "id": "basic-synth",
+      "name": "Sintetizador básico",
+      "description": "Keyboard → VCO → VCA + ADSR → Output.",
+      "file": "basic-synth.json"
+    },
+    {
+      "id": "filtered",
+      "name": "Con filtro (VCF)",
+      "description": "Básico + VCF.",
+      "file": "filtered.json"
+    },
+    {
+      "id": "lfo-mod",
+      "name": "Modulación LFO",
+      "description": "LFO → cutoff.",
+      "file": "lfo-mod.json"
+    },
+    {
+      "id": "sequencer",
+      "name": "Secuenciador",
+      "description": "Sequencer → synth.",
+      "file": "sequencer.json"
+    },
+    {
+      "id": "fx-chain",
+      "name": "Cadena de efectos",
+      "description": "Delay + Chorus + Reverb.",
+      "file": "fx-chain.json"
+    },
+    {
+      "id": "noise-perc",
+      "name": "Percusión noise",
+      "description": "Noise + VCF + ADSR corto.",
+      "file": "noise-perc.json"
+    },
+    {
+      "id": "poly-2voices",
+      "name": "Polifonía 2 voces",
+      "description": "Voices + 2 cadenas.",
+      "file": "poly-2voices.json"
+    },
+    {
+      "id": "additive",
+      "name": "Additive Fourier",
+      "description": "Síntesis aditiva con parciales.",
+      "file": "additive.json"
+    },
+    {
+      "id": "fm-simple",
+      "name": "FM 2 operadores",
+      "description": "FM carrier/mod simple.",
+      "file": "fm-simple.json"
+    },
+    {
+      "id": "dx7-algo5",
+      "name": "DX7 algoritmo 5",
+      "description": "6 ops, algo 5, EG propio.",
+      "file": "dx7-algo5.json"
+    },
+    {
+      "id": "wavetable",
+      "name": "Wavetable + LFO",
+      "description": "Morph de tabla + LFO a Pos.",
+      "file": "wavetable.json"
+    },
+    {
+      "id": "la-synth",
+      "name": "LA Upper/Lower",
+      "description": "Estilo D-50 PCM + dual tone.",
+      "file": "la-synth.json"
+    },
+    {
+      "id": "arp-synth",
+      "name": "Arpegiador",
+      "description": "Arp → VCO → VCA.",
+      "file": "arp-synth.json"
+    }
+  ]
+}

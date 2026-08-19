@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "name": "Modulación LFO",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 20,
+      "y": 100,
+      "params": { "octave": 0 }
+    },
+    {
+      "id": "vco1",
+      "type": "vco",
+      "x": 300,
+      "y": 40,
+      "params": { "waveform": "square", "frequency": 110, "detune": 0, "pw": 0.5 }
+    },
+    {
+      "id": "lfo1",
+      "type": "lfo",
+      "x": 300,
+      "y": 320,
+      "params": { "waveform": "sine", "rate": 3.5, "depth": 600 }
+    },
+    {
+      "id": "vcf1",
+      "type": "vcf",
+      "x": 540,
+      "y": 80,
+      "params": { "type": "lowpass", "frequency": 800, "Q": 6 }
+    },
+    {
+      "id": "adsr1",
+      "type": "adsr",
+      "x": 540,
+      "y": 320,
+      "params": { "attack": 0.05, "decay": 0.2, "sustain": 0.7, "release": 0.5 }
+    },
+    {
+      "id": "vca1",
+      "type": "vca",
+      "x": 780,
+      "y": 140,
+      "params": { "gain": 0.8 }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 1000,
+      "y": 160,
+      "params": { "volume": 0.65 }
+    }
+  ],
+  "wires": [
+    { "from": "kb1:cv", "to": "vco1:freq" },
+    { "from": "kb1:gate", "to": "adsr1:gate" },
+    { "from": "vco1:out", "to": "vcf1:in" },
+    { "from": "lfo1:out", "to": "vcf1:freq" },
+    { "from": "vcf1:out", "to": "vca1:in" },
+    { "from": "adsr1:out", "to": "vca1:cv" },
+    { "from": "vca1:out", "to": "out1:in" }
+  ]
+}

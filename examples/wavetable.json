@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "name": "Wavetable + LFO",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 20,
+      "y": 200,
+      "params": {
+        "octave": 0
+      }
+    },
+    {
+      "id": "wt1",
+      "type": "wavetable",
+      "x": 280,
+      "y": 40,
+      "params": {
+        "frequency": 110,
+        "position": 0.3,
+        "unison": 3,
+        "spread": 14
+      }
+    },
+    {
+      "id": "lfo1",
+      "type": "lfo",
+      "x": 280,
+      "y": 360,
+      "params": {
+        "frequency": 0.2,
+        "waveform": "triangle"
+      }
+    },
+    {
+      "id": "adsr1",
+      "type": "adsr",
+      "x": 540,
+      "y": 300,
+      "params": {
+        "attack": 0.08,
+        "decay": 0.2,
+        "sustain": 0.6,
+        "release": 0.5
+      }
+    },
+    {
+      "id": "vca1",
+      "type": "vca",
+      "x": 540,
+      "y": 80,
+      "params": {
+        "gain": 0.75
+      }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 780,
+      "y": 120,
+      "params": {
+        "volume": 0.65
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "kb1:cv",
+      "to": "wt1:freq"
+    },
+    {
+      "from": "kb1:gate",
+      "to": "adsr1:gate"
+    },
+    {
+      "from": "lfo1:out",
+      "to": "wt1:pos"
+    },
+    {
+      "from": "wt1:out",
+      "to": "vca1:in"
+    },
+    {
+      "from": "adsr1:out",
+      "to": "vca1:cv"
+    },
+    {
+      "from": "vca1:out",
+      "to": "out1:in"
+    }
+  ]
+}

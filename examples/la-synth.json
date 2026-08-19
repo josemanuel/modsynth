@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "name": "LA Upper/Lower",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 30,
+      "y": 120,
+      "params": {
+        "octave": 0
+      }
+    },
+    {
+      "id": "la1",
+      "type": "la",
+      "x": 300,
+      "y": 40,
+      "params": {
+        "frequency": 220,
+        "upperLevel": 0.75,
+        "lowerLevel": 0.55,
+        "lowerDetune": -8
+      }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 620,
+      "y": 180,
+      "params": {
+        "volume": 0.65
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "kb1:cv",
+      "to": "la1:freq"
+    },
+    {
+      "from": "kb1:gate",
+      "to": "la1:gate"
+    },
+    {
+      "from": "la1:out",
+      "to": "out1:in"
+    }
+  ]
+}

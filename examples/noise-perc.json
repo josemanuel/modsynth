@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "Percusión con ruido",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 30,
+      "y": 80,
+      "params": { "octave": 0 }
+    },
+    {
+      "id": "noise1",
+      "type": "noise",
+      "x": 320,
+      "y": 40,
+      "params": { "type": "white", "gain": 0.5 }
+    },
+    {
+      "id": "vcf1",
+      "type": "vcf",
+      "x": 540,
+      "y": 40,
+      "params": { "type": "highpass", "frequency": 4000, "Q": 2 }
+    },
+    {
+      "id": "adsr1",
+      "type": "adsr",
+      "x": 320,
+      "y": 260,
+      "params": { "attack": 0.001, "decay": 0.08, "sustain": 0.05, "release": 0.12 }
+    },
+    {
+      "id": "vca1",
+      "type": "vca",
+      "x": 760,
+      "y": 100,
+      "params": { "gain": 0.9 }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 980,
+      "y": 120,
+      "params": { "volume": 0.7 }
+    }
+  ],
+  "wires": [
+    { "from": "kb1:gate", "to": "adsr1:gate" },
+    { "from": "noise1:out", "to": "vcf1:in" },
+    { "from": "vcf1:out", "to": "vca1:in" },
+    { "from": "adsr1:out", "to": "vca1:cv" },
+    { "from": "vca1:out", "to": "out1:in" }
+  ]
+}

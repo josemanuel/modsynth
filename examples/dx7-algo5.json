@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "name": "DX7 Algo 5",
+  "modules": [
+    {
+      "id": "kb1",
+      "type": "keyboard",
+      "x": 30,
+      "y": 100,
+      "params": {
+        "octave": 0
+      }
+    },
+    {
+      "id": "dx1",
+      "type": "dx7",
+      "x": 300,
+      "y": 40,
+      "params": {
+        "frequency": 220,
+        "algorithm": 5,
+        "feedback": 0.2
+      }
+    },
+    {
+      "id": "out1",
+      "type": "output",
+      "x": 620,
+      "y": 160,
+      "params": {
+        "volume": 0.6
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "kb1:cv",
+      "to": "dx1:freq"
+    },
+    {
+      "from": "kb1:gate",
+      "to": "dx1:gate"
+    },
+    {
+      "from": "dx1:out",
+      "to": "out1:in"
+    }
+  ]
+}

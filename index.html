@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modular Synth – Web Audio</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/modules.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Toolbar -->
+    <header id="toolbar">
+      <div class="toolbar-left">
+        <h1>⚡ Modular Synth</h1>
+        <button id="btn-start" class="btn primary" title="Iniciar / detener audio">▶ Start</button>
+        <span id="audio-status" class="status off">Audio OFF</span>
+      </div>
+
+      <div class="toolbar-right">
+        <div class="dropdown" id="config-dropdown">
+          <button type="button" class="btn" id="btn-config" aria-expanded="false">⚙ Config ▾</button>
+          <div class="dropdown-menu dropdown-panel hidden" id="config-menu" role="menu">
+            <div class="dropdown-field">
+              <label>Engine</label>
+              <select id="audio-engine">
+                <option value="webaudio">Web Audio API</option>
+              </select>
+            </div>
+            <div class="dropdown-field">
+              <label>Sample Rate</label>
+              <select id="sample-rate">
+                <option value="44100">44.1 kHz</option>
+                <option value="48000" selected>48 kHz</option>
+                <option value="96000">96 kHz</option>
+              </select>
+            </div>
+            <div class="dropdown-field">
+              <label>MIDI In</label>
+              <div class="midi-row">
+                <select id="midi-input">
+                  <option value="">—</option>
+                </select>
+                <button type="button" id="btn-midi-refresh" class="btn" title="Refrescar MIDI">↻</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dropdown" id="files-dropdown">
+          <button type="button" class="btn" id="btn-files" aria-expanded="false">📁 Archivos ▾</button>
+          <div class="dropdown-menu dropdown-panel hidden" id="files-menu" role="menu">
+            <button type="button" class="dropdown-item" id="btn-export">Export JSON</button>
+            <button type="button" class="dropdown-item" id="btn-import">Import JSON</button>
+            <input type="file" id="import-file" accept=".json" hidden />
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-sublabel">Ejemplos</div>
+            <div id="examples-menu" class="examples-in-files">
+              <div class="dropdown-loading">Cargando ejemplos…</div>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-connections" class="btn" title="Tabla de conexiones">Conexiones</button>
+        <button id="btn-diagram" class="btn" title="Diagrama de flujo">Diagrama</button>
+        <button id="btn-make-block" class="btn" title="Crear bloque desde selección (Ctrl+clic módulos)">📦 Bloque</button>
+        <button id="btn-clear" class="btn danger">Clear</button>
+        <button id="btn-theme" class="btn" title="Modo claro / oscuro" aria-label="Tema">☾</button>
+        <button id="btn-about" class="btn" title="Acerca de">Acerca de…</button>
+      </div>
+    </header>
+
+    <!-- Connections panel -->
+    <aside id="connections-panel" class="connections-panel hidden" aria-label="Tabla de conexiones">
+      <div class="connections-header">
+        <h3>Conexiones</h3>
+        <button type="button" class="btn" id="btn-connections-close" title="Cerrar">×</button>
+      </div>
+      <div class="connections-body">
+        <table class="connections-table" id="connections-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Desde</th>
+              <th>Puerto</th>
+              <th></th>
+              <th>Hacia</th>
+              <th>Puerto</th>
+              <th>Tipo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="connections-tbody">
+            <tr class="connections-empty"><td colspan="8">Sin conexiones</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </aside>
+
+    <!-- Main workspace -->
+    <main id="workspace">
+      <aside id="palette">
+        <h3>Módulos</h3>
+        <div id="palette-scroll">
+        <details class="palette-cat" open>
+          <summary>Generadores</summary>
+          <div class="palette-group">
+            <button class="palette-item" data-type="vco">VCO</button>
+            <button class="palette-item" data-type="noise">Noise</button>
+            <button class="palette-item" data-type="additive">Additive</button>
+            <button class="palette-item" data-type="fm">FM</button>
+            <button class="palette-item" data-type="dx7">DX7 FM</button>
+            <button class="palette-item" data-type="wavetable">Wavetable</button>
+            <button class="palette-item" data-type="la">LA</button>
+            <button class="palette-item" data-type="sample">Sample</button>
+            <button class="palette-item" data-type="granular">Granular</button>
+          </div>
+        </details>
+
+        <details class="palette-cat">
+          <summary>Procesadores</summary>
+          <div class="palette-group">
+            <button class="palette-item" data-type="vcf">VCF</button>
+            <button class="palette-item" data-type="vca">VCA</button>
+            <button class="palette-item" data-type="mixer">Mixer</button>
+            <button class="palette-item" data-type="splitter">Splitter</button>
+            <button class="palette-item" data-type="panner">Panner</button>
+            <button class="palette-item" data-type="delay">Delay</button>
+            <button class="palette-item" data-type="chorus">Chorus</button>
+            <button class="palette-item" data-type="reverb">Reverb</button>
+            <button class="palette-item" data-type="scope">Scope</button>
+          </div>
+        </details>
+
+        <details class="palette-cat">
+          <summary>Bloques</summary>
+          <div class="palette-group">
+            <button class="palette-item" data-type="block">Block</button>
+          </div>
+        </details>
+
+        <details class="palette-cat">
+          <summary>Moduladores</summary>
+          <div class="palette-group">
+            <button class="palette-item" data-type="adsr">ADSR</button>
+            <button class="palette-item" data-type="lfo">LFO</button>
+          </div>
+        </details>
+
+        <details class="palette-cat">
+          <summary>Control / seq</summary>
+          <div class="palette-group">
+            <button class="palette-item" data-type="keyboard">Keyboard</button>
+            <button class="palette-item" data-type="sequencer">Sequencer</button>
+            <button class="palette-item" data-type="arp">Arp</button>
+            <button class="palette-item" data-type="voices">Voices</button>
+            <button class="palette-item" data-type="midicc">MIDI CC</button>
+          </div>
+        </details>
+
+        <details class="palette-cat" open>
+          <summary>Salida</summary>
+          <div class="palette-group">
+            <button class="palette-item" data-type="output">Output</button>
+          </div>
+        </details>
+        </div>
+        <div id="palette-zoom">
+          <button type="button" class="btn canvas-btn" id="btn-zoom-out" title="Alejar">−</button>
+          <span id="zoom-label">100%</span>
+          <button type="button" class="btn canvas-btn" id="btn-zoom-in" title="Acercar">+</button>
+          <button type="button" class="btn canvas-btn" id="btn-zoom-reset" title="Zoom 100%">⟲</button>
+        </div>
+      </aside>
+
+      <div id="workspace-main">
+      <div id="canvas-container">
+        <div id="canvas-world">
+          <svg id="wires-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div id="modules-layer"></div>
+        </div>
+      </div>
+      </div>
+    </main>
+
+    <!-- Status bar -->
+    <footer id="statusbar">
+      <span id="midi-status">MIDI: —</span>
+      <span id="midi-activity" class="midi-led" title="Actividad MIDI"></span>
+      <span id="patch-info">Modules: 0 | Wires: 0</span>
+      <span id="cpu-info"></span>
+    </footer>
+  </div>
+
+  <!-- Context menu for adding modules -->
+    <div id="context-menu" class="hidden">
+    <div class="menu-title">Añadir módulo</div>
+    <div class="ctx-section">Generadores</div>
+    <button data-type="vco">VCO</button>
+    <button data-type="noise">Noise</button>
+    <button data-type="additive">Additive</button>
+    <button data-type="fm">FM</button>
+    <button data-type="dx7">DX7 FM</button>
+    <button data-type="wavetable">Wavetable</button>
+    <button data-type="la">LA</button>
+    <button data-type="sample">Sample</button>
+    <button data-type="granular">Granular</button>
+    <div class="ctx-section">Procesadores</div>
+    <button data-type="vcf">VCF</button>
+    <button data-type="vca">VCA</button>
+    <button data-type="mixer">Mixer</button>
+    <button data-type="splitter">Splitter</button>
+    <button data-type="panner">Panner</button>
+    <button data-type="delay">Delay</button>
+    <button data-type="chorus">Chorus</button>
+    <button data-type="reverb">Reverb</button>
+    <button data-type="scope">Scope</button>
+    <div class="ctx-section">Bloques</div>
+    <button data-type="block">Block</button>
+    <div class="ctx-section">Moduladores</div>
+    <button data-type="adsr">ADSR</button>
+    <button data-type="lfo">LFO</button>
+    <div class="ctx-section">Control</div>
+    <button data-type="keyboard">Keyboard</button>
+    <button data-type="sequencer">Sequencer</button>
+    <button data-type="arp">Arp</button>
+    <button data-type="voices">Voices</button>
+    <button data-type="midicc">MIDI CC</button>
+    <div class="ctx-section">Salida</div>
+    <button data-type="output">Output</button>
+  </div>
+
+  <!-- Help / Guide modal -->
+  <div id="help-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="modal-backdrop" data-help-close></div>
+    <div class="modal-dialog modal-dialog-wide modal-dialog-help">
+      <div class="modal-header">
+        <h2 id="help-title">Guía de Modular Synth</h2>
+        <button type="button" class="btn modal-close" data-help-close title="Cerrar">×</button>
+      </div>
+      <div class="modal-body help-body">
+        <nav class="help-nav">
+          <button type="button" class="help-nav-btn active" data-help-sec="inicio">Inicio</button>
+          <button type="button" class="help-nav-btn" data-help-sec="cableado">Cableado</button>
+          <button type="button" class="help-nav-btn" data-help-sec="generadores">Generadores</button>
+          <button type="button" class="help-nav-btn" data-help-sec="procesadores">Procesadores</button>
+          <button type="button" class="help-nav-btn" data-help-sec="control">Control</button>
+          <button type="button" class="help-nav-btn" data-help-sec="midi">MIDI</button>
+          <button type="button" class="help-nav-btn" data-help-sec="patches">Patches</button>
+          <button type="button" class="help-nav-btn" data-help-sec="canvas">Canvas</button>
+        </nav>
+        <div class="help-content">
+          <section class="help-sec active" data-sec="inicio">
+            <h3>Inicio rápido</h3>
+            <ol>
+              <li>Pulsa <strong>Start</strong> para activar el audio.</li>
+              <li>Añade módulos desde la <strong>paleta</strong> (categorías) o <strong>clic derecho</strong>.</li>
+              <li>Conecta salida → entrada arrastrando sockets.</li>
+              <li>Básico: Keyboard.CV→VCO.Freq, Gate→ADSR, VCO→VCA←ADSR, VCA→Output.</li>
+              <li>Prueba <strong>Ejemplos</strong>.</li>
+            </ol>
+            <h4>Tipos de cable</h4>
+            <ul>
+              <li><span class="pill audio">audio</span> señal</li>
+              <li><span class="pill cv">cv</span> control</li>
+              <li><span class="pill gate">gate</span> disparo</li>
+            </ul>
+          </section>
+          <section class="help-sec" data-sec="cableado">
+            <h3>Cableado y VCA</h3>
+            <p>CV al VCA se suma al AudioParam: el VCA con CV usa base 0 y el ADSR abre el volumen. Level es el tope.</p>
+            <p><strong>Conexiones</strong> lista y borra cables. Polifonía: módulo Voices + cadena por voz.</p>
+          </section>
+          <section class="help-sec" data-sec="generadores">
+            <h3>Generadores</h3>
+            <ul>
+              <li><strong>VCO</strong> — + ring mod</li>
+              <li><strong>Additive</strong> — Fourier, stretch, inharm</li>
+              <li><strong>FM / DX7 FM</strong> — 2 ops o 6 ops + 32 algos + EG</li>
+              <li><strong>Wavetable</strong> — morph, carga WAV/JSON</li>
+              <li><strong>LA</strong> — PCM + Upper/Lower</li>
+              <li><strong>Sample / Granular</strong> — sample y granos</li>
+              <li><strong>Noise</strong></li>
+            </ul>
+          </section>
+          <section class="help-sec" data-sec="procesadores">
+            <h3>Procesadores y moduladores</h3>
+            <ul>
+              <li>VCF, VCA, Mixer, Delay, Chorus, Reverb</li>
+              <li>ADSR, LFO</li>
+            </ul>
+          </section>
+          <section class="help-sec" data-sec="control">
+            <h3>Control</h3>
+            <ul>
+              <li>Keyboard (HOLD, PC keys), Sequencer, Arp, Voices, MIDI CC, Output</li>
+            </ul>
+          </section>
+          <section class="help-sec" data-sec="midi">
+            <h3>MIDI</h3>
+            <p>Selecciona dispositivo en MIDI In. Notas al Keyboard/Voices. MIDI CC Learn para knobs.</p>
+          </section>
+          <section class="help-sec" data-sec="patches">
+            <h3>Patches</h3>
+            <p>Export/Import JSON. Ejemplos en examples/. Diagrama → PDF.</p>
+          </section>
+          <section class="help-sec" data-sec="canvas">
+            <h3>Canvas</h3>
+            <p>Scroll H/V. Zoom −/+ o Ctrl+rueda. Arrastre por cabecera del módulo.</p>
+          </section>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn primary" data-help-close>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+<!-- About modal -->
+  <div id="about-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="about-title">
+    <div class="modal-backdrop" data-about-close></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="about-title">Acerca de Modular Synth</h2>
+        <button type="button" class="btn modal-close" data-about-close title="Cerrar">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="about-actions">
+          <button type="button" class="btn primary" id="btn-tutorial">📖 Tutorial</button>
+        </div>
+
+        <p class="about-lead">
+          <strong>Modular Synth</strong> es un sintetizador modular que se ejecuta por completo en el navegador
+          (HTML, CSS y JavaScript + Web Audio API). Está inspirado en entornos como SynthEdit, FlowStone o un rack Eurorack:
+          añades módulos, los unes con cables y el sonido se genera en tiempo real.
+        </p>
+
+        <h3>Motor de audio</h3>
+        <ul class="about-list">
+          <li><strong>Web Audio API</strong> como motor principal, con selección de sample rate (44,1 / 48 / 96 kHz).</li>
+          <li>Salida real a los altavoces del sistema tras pulsar <strong>Start</strong> (requisito de los navegadores).</li>
+          <li>Medidor de nivel en el módulo <strong>Output</strong>.</li>
+        </ul>
+
+        <h3>Módulos de síntesis</h3>
+        <ul class="about-list">
+          <li><strong>Additive:</strong> síntesis aditiva / Fourier (hasta 16 parciales, tilt, odd/even, stretch).</li>
+          <li><strong>LA:</strong> estilo Roland Linear Arithmetic (PCM attack + synth, mix/ring/xfade, TVF/TVA).</li>
+          <li><strong>VCO:</strong> oscilador (sine, saw, square, triangle), frecuencia, detune, FM, y <em>ring modulation</em> (mezcla dry/wet y ratio; entrada Ring In opcional).</li>
+          <li><strong>VCF:</strong> filtro multimodo (lowpass, highpass, bandpass, notch) con cutoff, resonancia y CV de corte.</li>
+          <li><strong>VCA:</strong> amplificador controlado por CV (ideal con la salida del ADSR).</li>
+          <li><strong>ADSR:</strong> envolvente Attack / Decay / Sustain / Release, disparada por Gate (respeta velocity).</li>
+          <li><strong>LFO:</strong> oscilador de baja frecuencia para modular cutoff, amplitud, etc.</li>
+          <li><strong>Noise:</strong> ruido blanco (base para percusión y texturas).</li>
+          <li><strong>Mixer:</strong> mezcla de hasta 3 señales con niveles por canal y master.</li>
+        </ul>
+
+        <h3>Sample</h3>
+        <ul class="about-list">
+          <li>Carga de archivos <strong>WAV, MP3 u OGG</strong>.</li>
+          <li>Control de pitch mediante <strong>Freq CV</strong> (compatible con teclado y secuenciador, en Hz).</li>
+          <li><strong>Root key</strong>, detune, gain, loop y retrig al recibir gate.</li>
+          <li><strong>ADSR interno</strong> sobre el volumen del sample.</li>
+          <li><strong>Filtro resonante</strong> (LP / HP / BP) con cutoff, resonancia y entrada CV de corte.</li>
+        </ul>
+
+        <h3>Control y secuencia</h3>
+        <ul class="about-list">
+          <li><strong>Keyboard:</strong> al menos 4 octavas en pantalla, ratón, teclado QWERTY y <strong>Web MIDI</strong> (Note On/Off con velocity).</li>
+          <li><strong>Arpeggiator:</strong> modos Up, Down, Up-Down y Random; 1–3 octavas; rate, longitud de gate y latch.</li>
+          <li><strong>Sequencer:</strong> hasta 32 pasos, longitud configurable, sliders verticales por nota, BPM, play/stop; salidas CV y Gate.</li>
+          <li><strong>MIDI CC:</strong> módulo visual con Learn CC / Learn Param, mapeo a knobs de otros módulos, min/max y feedback de nivel.</li>
+        </ul>
+
+        <h3>Efectos</h3>
+        <ul class="about-list">
+          <li><strong>Delay:</strong> tiempo, feedback y mix.</li>
+          <li><strong>Chorus:</strong> rate, depth y mix.</li>
+          <li><strong>Reverb:</strong> decay y mix (respuesta a impulso generada en el navegador).</li>
+        </ul>
+
+        <h3>Interfaz y patches</h3>
+        <ul class="about-list">
+          <li>Paleta de módulos, arrastre, clic derecho para añadir, cables curvados (SVG) por tipo: audio, CV, gate.</li>
+          <li><strong>Tabla de conexiones:</strong> listado de todos los cables y borrado individual.</li>
+          <li><strong>Export / Import JSON</strong> del patch completo (módulos, parámetros y cables).</li>
+          <li>Menú <strong>Ejemplos</strong>: carga presets desde la carpeta <code>examples/</code> (manifiesto + descubrimiento dinámico en GitHub Pages).</li>
+        </ul>
+
+        <h3>Uso rápido</h3>
+        <ol class="about-list">
+          <li>Pulsa <strong>Start</strong> para iniciar el AudioContext.</li>
+          <li>Añade módulos desde la izquierda o con el menú contextual.</li>
+          <li>Conecta arrastrando de un socket de salida a uno de entrada.</li>
+          <li>Patch básico: Keyboard → VCO → VCA; Keyboard Gate → ADSR → VCA CV; VCA → Output.</li>
+          <li>Explora presets en <strong>Ejemplos</strong> o revisa cables en <strong>Conexiones</strong>.</li>
+        </ol>
+
+        <div class="about-author">
+          <p><strong>Autor:</strong> José Manuel Fernández Carreira</p>
+          <p>
+            <a href="https://soundcloud.com/jmfcarreira" target="_blank" rel="noopener noreferrer">
+              https://soundcloud.com/jmfcarreira
+            </a>
+          </p>
+        </div>
+              <h3>Novedades</h3>
+        <ul class="about-list">
+          <li>Motores: Additive, FM, DX7 (6 ops / 32 algos), Wavetable, LA, Granular, Sample.</li>
+          <li>Control: Voices, Arp, Sequencer 32, Keyboard HOLD + PC keys.</li>
+          <li>Canvas: scroll, zoom, diagrama PDF, conexiones.</li>
+          <li>UI: paleta por categorías, Config / Archivos, tema claro/oscuro, Start/Stop.</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn primary" data-about-close>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Diagram modal -->
+  <div id="diagram-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-diagram-close></div>
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <h2>Diagrama del patch</h2>
+        <button type="button" class="btn modal-close" data-diagram-close title="Cerrar">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="diagram-canvas-wrap">
+          <svg id="diagram-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <p class="diagram-hint">Vista esquemática de módulos y conexiones. Usa «Guardar PDF» para imprimir o guardar como PDF.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="btn-diagram-pdf">Guardar PDF</button>
+        <button type="button" class="btn primary" data-diagram-close>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
