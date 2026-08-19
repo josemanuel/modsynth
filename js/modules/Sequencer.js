@@ -21,7 +21,9 @@ export class Sequencer extends Module {
     this.params = {
       bpm: 120,
       length: 16,
-      steps: defaultSteps(MAX_STEPS)
+      steps: defaultSteps(MAX_STEPS),
+      scaleMode: 'chromatic',
+      scaleRoot: 0
     };
     this.currentStep = 0;
     this.isPlaying = false;
@@ -49,7 +51,28 @@ export class Sequencer extends Module {
         <label>BPM <span class="value-display" data-display="bpm">${this.params.bpm}</span></label>
         <input type="range" data-param="bpm" min="40" max="240" step="1" value="${this.params.bpm}" />
       </div>
+      <div class="control">
+        <label>Escala
+          <select data-param="scaleMode">
+            <option value="chromatic">Cromática</option>
+            <option value="major">Mayor</option>
+            <option value="minor">Menor</option>
+            <option value="random">Aleatorio</option>
+          </select>
+        </label>
+      </div>
+      <div class="control">
+        <label>Tónica
+          <select data-param="scaleRoot">
+            <option value="0">C</option><option value="1">C#</option><option value="2">D</option>
+            <option value="3">D#</option><option value="4">E</option><option value="5">F</option>
+            <option value="6">F#</option><option value="7">G</option><option value="8">G#</option>
+            <option value="9">A</option><option value="10">A#</option><option value="11">B</option>
+          </select>
+        </label>
+      </div>
       <div style="display:flex;gap:6px;margin-top:4px">
+        <button class="btn" data-action="fill-scale" style="flex:1" title="Rellenar pasos con la escala">Fill</button>
         <button class="btn" data-action="play" style="flex:1">▶</button>
         <button class="btn" data-action="stop" style="flex:1">■</button>
       </div>
@@ -73,6 +96,59 @@ export class Sequencer extends Module {
 
     this.el.querySelector('[data-action="play"]').addEventListener('click', () => this.play());
     this.el.querySelector('[data-action="stop"]').addEventListener('click', () => this.stop());
+    this.el.querySelector('[data-action="fill-scale"]').addEventListener('click', () => this.fillScale());
+    const sm = this.el.querySelector('[data-param="scaleMode"]');
+    if (sm) {
+      sm.value = this.params.scaleMode;
+      sm.addEventListener('change', (e) => { this.params.scaleMode = e.target.value; });
+    }
+    const sr = this.el.querySelector('[data-param="scaleRoot"]');
+    if (sr) {
+      sr.value = String(this.params.scaleRoot);
+      sr.addEventListener('change', (e) => { this.params.scaleRoot = parseInt(e.target.value, 10); });
+    }
+  }
+
+  _scaleDegrees() {
+    const root = this.params.scaleRoot | 0;
+    const major = [0, 2, 4, 5, 7, 9, 11];
+    const minor = [0, 2, 3, 5, 7, 8, 10];
+    if (this.params.scaleMode === 'major') return major.map((d) => (root + d) % 12);
+    if (this.params.scaleMode === 'minor') return minor.map((d) => (root + d) % 12);
+    return null; // chromatic / random handled aparte
+  }
+
+  fillScale() {
+    const len = this.params.length;
+    const mode = this.params.scaleMode;
+    const root = this.params.scaleRoot | 0;
+    const major = [0, 2, 4, 5, 7, 9, 11].map((d) => (root + d) % 12);
+    const minor = [0, 2, 3, 5, 7, 8, 10].map((d) => (root + d) % 12);
+
+    if (mode === 'random') {
+      const pool = major; // aleatorio sobre mayor de la tónica
+      for (let i = 0; i < len; i++) {
+        if (Math.random() < 0.22) {
+          this.params.steps[i] = 0;
+        } else {
+          const d = pool[Math.floor(Math.random() * pool.length)];
+          const oct = Math.floor(Math.random() * 3);
+          this.params.steps[i] = Math.min(NOTE_MAX, 36 + oct * 12 + d);
+        }
+      }
+    } else if (mode === 'chromatic') {
+      for (let i = 0; i < len; i++) {
+        this.params.steps[i] = Math.min(NOTE_MAX, 48 + (i % 24));
+      }
+    } else {
+      const deg = mode === 'minor' ? minor : major;
+      for (let i = 0; i < len; i++) {
+        const d = deg[i % deg.length];
+        const oct = Math.floor(i / deg.length) % 3;
+        this.params.steps[i] = Math.min(NOTE_MAX, 36 + oct * 12 + d);
+      }
+    }
+    this._renderSliders();
   }
 
   _midiToLabel(m) {
@@ -155,6 +231,7 @@ export class Sequencer extends Module {
       const freq = AudioEngine.midiToFreq(step);
       this.freqNode.offset.setValueAtTime(freq, t);
       this.gateNode.offset.setValueAtTime(1, t);
+      this._notifyFreqTargets();
       this._notifyGate(true);
       setTimeout(() => {
         if (!this.isPlaying) return;
@@ -171,11 +248,17 @@ export class Sequencer extends Module {
     this.timer = setTimeout(() => this._tick(), ms);
   }
 
+  _notifyFreqTargets() {
+    this.getPort('cv').connections.forEach((wire) => {
+      const mod = wire.to.module;
+      if (mod && typeof mod.applyParams === 'function') mod.applyParams();
+    });
+  }
+
   _notifyGate(on) {
     this.getPort('gate').connections.forEach((wire) => {
       const targetMod = wire.to.module;
-      if ((targetMod.type === 'adsr' || targetMod.type === 'sample' || targetMod.type === 'la' || targetMod.type === 'granular' || targetMod.type === 'dx7' || targetMod.type === 'dx7') &&
-          typeof targetMod.trigger === 'function') {
+      if (targetMod && typeof targetMod.trigger === 'function') {
         targetMod.trigger(on);
       }
     });

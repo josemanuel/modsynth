@@ -111,12 +111,10 @@ export class FM extends Module {
     this.modOsc.start();
     this.carrier.start();
 
-    this.freqConst = this.audioEngine.createConstant(this.params.frequency);
-    // Index CV: escala profundidad
     this.indexConst = this.audioEngine.createConstant(1);
-
     this.getPort('out').node = this.outGain;
-    this.getPort('freq').node = this.freqConst;
+    // Freq CV → carrier.frequency (y mod = ratio * carrier vía sync)
+    this.getPort('freq').node = this.carrier.frequency;
     this.getPort('mod').node = this.indexConst;
 
     this._timer = setInterval(() => this._sync(), 25);
@@ -124,13 +122,11 @@ export class FM extends Module {
   }
 
   _sync() {
-    if (!this.carrier || !this.freqConst || !this.audioEngine.context) return;
-    let f = this.params.frequency;
-    const cv = this.freqConst.offset.value;
-    if (cv > 20) f = cv;
+    if (!this.carrier || !this.audioEngine.context) return;
+    const hasCv = this.getPort('freq').connections.length > 0;
+    const f = hasCv ? 0 : this.params.frequency;
     const ratio = this.params.ratio;
-    const idxScale = Math.max(0, this.indexConst.offset.value);
-    // Si no hay cable en mod, offset suele ser 1; si llega CV tipo 0..1 o Hz, normalizar
+    const idxScale = Math.max(0, this.indexConst ? this.indexConst.offset.value : 1);
     let scale = 1;
     if (this.getPort('mod').connections.length) {
       scale = idxScale > 2 ? Math.min(1, idxScale / 100) : idxScale;
@@ -138,7 +134,8 @@ export class FM extends Module {
     const t = this.audioEngine.context.currentTime;
     try {
       this.carrier.frequency.setValueAtTime(f, t);
-      this.modOsc.frequency.setValueAtTime(f * ratio, t);
+      // mod osc: sin CV usa f*ratio; con CV se aproxima con ratio sobre última nota via timer
+      if (!hasCv) this.modOsc.frequency.setValueAtTime(this.params.frequency * ratio, t);
       this.modGain.gain.setValueAtTime(this.params.index * scale, t);
     } catch (e) {}
   }

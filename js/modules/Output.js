@@ -4,12 +4,35 @@ export class Output extends Module {
   constructor(audioEngine, x, y) {
     super('output', audioEngine, x, y);
     this.title = 'Output';
-    this.params = { volume: 0.7 };
+    this.width = 200;
+    this.params = { volume: 0.7, engine: 'webaudio' };
 
     this.addPort('in', 'In', 'audio', 'in');
   }
 
   renderBody() {
+    const engines = [
+      { id: 'webaudio', label: 'Web Audio API', ok: true },
+      { id: 'asio', label: 'ASIO (escritorio)', ok: false },
+      { id: 'wasapi', label: 'WASAPI', ok: false },
+      { id: 'coreaudio', label: 'Core Audio', ok: false },
+      { id: 'jack', label: 'JACK', ok: false }
+    ];
+    let opts = engines
+      .map(
+        (e) =>
+          '<option value="' +
+          e.id +
+          '"' +
+          (e.id === this.params.engine ? ' selected' : '') +
+          (e.ok ? '' : ' disabled') +
+          '>' +
+          e.label +
+          (e.ok ? '' : ' — n/d') +
+          '</option>'
+      )
+      .join('');
+
     return `
       <div class="ports-row">
         <div class="ports-col">
@@ -21,6 +44,11 @@ export class Output extends Module {
         <div class="ports-col"></div>
       </div>
       <div class="control">
+        <label>Audio engine</label>
+        <select data-param="engine">${opts}</select>
+      </div>
+      <div class="out-engine-hint" data-engine-hint>Activo: Web Audio API (navegador)</div>
+      <div class="control">
         <label>Volume <span class="value-display" data-display="volume">0.70</span></label>
         <input type="range" data-param="volume" min="0" max="1" step="0.01" value="0.7" />
       </div>
@@ -30,11 +58,25 @@ export class Output extends Module {
 
   _bindControls() {
     const input = this.el.querySelector('[data-param="volume"]');
-    input.addEventListener('input', e => {
+    input.addEventListener('input', (e) => {
       this.params.volume = parseFloat(e.target.value);
       this.el.querySelector('[data-display="volume"]').textContent =
         this.params.volume.toFixed(2);
       if (this.gain) this.gain.gain.value = this.params.volume;
+    });
+    const eng = this.el.querySelector('[data-param="engine"]');
+    eng.addEventListener('change', (e) => {
+      this.params.engine = e.target.value;
+      const hint = this.el.querySelector('[data-engine-hint]');
+      if (this.params.engine === 'webaudio') {
+        hint.textContent = 'Activo: Web Audio API (navegador)';
+      } else {
+        hint.textContent =
+          'ASIO/WASAPI/Core/JACK requieren app nativa (p. ej. JUCE). En el navegador solo Web Audio.';
+        // revert visual selection
+        eng.value = 'webaudio';
+        this.params.engine = 'webaudio';
+      }
     });
   }
 
@@ -48,7 +90,6 @@ export class Output extends Module {
 
     this.getPort('in').node = this.gain;
 
-    // Simple level meter
     this._meterInterval = setInterval(() => this._updateMeter(), 50);
   }
 

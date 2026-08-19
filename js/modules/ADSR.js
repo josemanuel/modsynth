@@ -60,8 +60,58 @@ export class ADSR extends Module {
         this.params[param] = val;
         const disp = this.el.querySelector(`[data-display="${param}"]`);
         if (disp) disp.textContent = val.toFixed(2);
+        this._drawEnvelope();
       });
     });
+    this._drawEnvelope();
+  }
+
+  _drawEnvelope() {
+    const canvas = this.el && this.el.querySelector('[data-adsr-vis]');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const { attack, decay, sustain, release } = this.params;
+    const total = attack + decay + 0.35 + release; // sustain visual dwell
+    const pad = 4;
+    const xA = pad + (attack / total) * (w - pad * 2);
+    const xD = xA + (decay / total) * (w - pad * 2);
+    const xS = xD + (0.35 / total) * (w - pad * 2);
+    const xR = w - pad;
+    const y0 = h - pad;
+    const yPeak = pad;
+    const ySus = pad + (1 - sustain) * (h - pad * 2);
+
+    ctx.fillStyle = '#0a0c10';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#1a2230';
+    ctx.beginPath();
+    ctx.moveTo(0, y0);
+    ctx.lineTo(w, y0);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(pad, y0);
+    ctx.lineTo(xA, yPeak);
+    ctx.lineTo(xD, ySus);
+    ctx.lineTo(xS, ySus);
+    ctx.lineTo(xR, y0);
+    ctx.strokeStyle = '#4fc3f7';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.lineTo(pad, y0);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(79,195,247,0.15)';
+    ctx.fill();
+
+    // labels
+    ctx.fillStyle = '#8a93a8';
+    ctx.font = '9px system-ui,sans-serif';
+    ctx.fillText('A', (pad + xA) / 2 - 3, h - 6);
+    ctx.fillText('D', (xA + xD) / 2 - 3, h - 6);
+    ctx.fillText('S', (xD + xS) / 2 - 3, h - 6);
+    ctx.fillText('R', (xS + xR) / 2 - 3, h - 6);
   }
 
   buildAudio() {

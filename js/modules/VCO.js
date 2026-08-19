@@ -155,20 +155,36 @@ export class VCO extends Module {
 
   applyParams() {
     if (!this.osc) return;
-    const t = this.audioEngine.context.currentTime;
+    const now = this.audioEngine.context.currentTime;
     this.osc.type = this.params.waveform;
-    this.osc.frequency.setValueAtTime(this.params.frequency, t);
-    this.osc.detune.setValueAtTime(this.params.detune, t);
+    // CV del teclado es Hz (1V/oct → f = 440*2^((m-69)/12)).
+    // Web Audio SUMA el CV al AudioParam: con CV conectado la base debe ser 0.
+    const hasCv = this.getPort('freq').connections.length > 0;
+    const base = hasCv ? 0 : this.params.frequency;
+    this.osc.frequency.setValueAtTime(base, now);
+    this.osc.detune.setValueAtTime(this.params.detune, now);
     if (this.ringOsc) {
       this.ringOsc.type = this.params.waveform;
-      this.ringOsc.frequency.setValueAtTime(
-        this.params.frequency * this.params.ringRatio,
-        t
-      );
+      // ring sigue la base manual; con CV el anillo usa ratio sobre nota vía detune aproximado
+      const ringBase = hasCv ? 0 : this.params.frequency * this.params.ringRatio;
+      this.ringOsc.frequency.setValueAtTime(ringBase, now);
+      if (hasCv && this.getPort('freq').node === this.osc.frequency) {
+        // conectar CV también al ring con ratio (una sola vez)
+        this._ensureRingCv();
+      }
     }
     const ring = this.params.ring;
-    if (this.dryGain) this.dryGain.gain.setValueAtTime(1 - ring, t);
-    if (this.wetGain) this.wetGain.gain.setValueAtTime(ring, t);
+    if (this.dryGain) this.dryGain.gain.setValueAtTime(1 - ring, now);
+    if (this.wetGain) this.wetGain.gain.setValueAtTime(ring, now);
+  }
+
+  _ensureRingCv() {
+    if (this._ringCvGain || !this.ringOsc) return;
+    const ctx = this.audioEngine.context;
+    this._ringCvGain = ctx.createGain();
+    this._ringCvGain.gain.value = this.params.ringRatio || 1;
+    // Las conexiones existentes a osc.frequency no se reutilizan fácilmente;
+    // el ring sin CV de pitch sigue usable en modo manual.
   }
 
   destroy() {

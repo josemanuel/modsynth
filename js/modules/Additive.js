@@ -222,26 +222,39 @@ export class Additive extends Module {
       this.gains.push(g);
     }
 
-    this.freqConst = this.audioEngine.createConstant(this.params.frequency);
     this.getPort('out').node = this.outGain;
-    this.getPort('freq').node = this.freqConst;
+    // Bus de CV: GainNode → ratio → osc.frequency (base 0 si hay CV)
+    this.freqBus = this.audioEngine.context.createGain();
+    this.freqBus.gain.value = 1;
+    this.getPort('freq').node = this.freqBus;
+    this.ratioGains = [];
+    for (let i = 0; i < MAX_PARTIALS; i++) {
+      const rg = this.audioEngine.context.createGain();
+      rg.gain.value = this._partialRatio(i);
+      this.freqBus.connect(rg);
+      rg.connect(this.oscs[i].frequency);
+      this.ratioGains.push(rg);
+    }
 
     this._freqTimer = setInterval(() => this._syncFromCv(), 25);
     this.applyParams();
   }
 
   _syncFromCv() {
-    if (!this.oscs.length || !this.freqConst || !this.audioEngine.context) return;
-    let f = this.params.frequency;
-    const cv = this.freqConst.offset.value;
-    if (cv > 20) f = cv;
+    if (!this.oscs.length || !this.audioEngine.context) return;
+    const hasCv = this.getPort('freq').connections.length > 0;
+    const f = this.params.frequency;
     const det = Math.pow(2, (this.params.detune || 0) / 1200);
     const n = this.params.partials || 1;
     const t = this.audioEngine.context.currentTime;
     for (let i = 0; i < MAX_PARTIALS; i++) {
-      const freq = Math.min(f * this._partialRatio(i) * det, 20000);
       try {
-        this.oscs[i].frequency.setValueAtTime(freq, t);
+        // Con CV: base 0 (el bus aporta Hz * ratio). Sin CV: frecuencia fija.
+        const base = hasCv ? 0 : Math.min(f * this._partialRatio(i) * det, 20000);
+        this.oscs[i].frequency.setValueAtTime(base, t);
+        if (this.ratioGains && this.ratioGains[i]) {
+          this.ratioGains[i].gain.setValueAtTime(this._partialRatio(i) * det, t);
+        }
         this.gains[i].gain.setValueAtTime(i < n ? this.params.levels[i] || 0 : 0, t);
       } catch (e) {}
     }

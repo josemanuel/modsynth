@@ -330,11 +330,12 @@ export class Wavetable extends Module {
 
     this.outGain = ctx.createGain();
     this.outGain.gain.value = this.params.level;
-    this.freqConst = this.audioEngine.createConstant(this.params.frequency);
+    this.freqBus = this.audioEngine.context.createGain();
+    this.freqBus.gain.value = 1;
     this.posConst = this.audioEngine.createConstant(0);
 
     this.getPort('out').node = this.outGain;
-    this.getPort('freq').node = this.freqConst;
+    this.getPort('freq').node = this.freqBus;
     this.getPort('pos').node = this.posConst;
 
     this._rebuildUnison();
@@ -403,10 +404,9 @@ export class Wavetable extends Module {
   }
 
   _sync() {
-    if (!this._voices.length || !this.freqConst || !this.audioEngine.context || !this._waves) return;
+    if (!this._voices.length || !this.freqBus || !this.audioEngine.context || !this._waves) return;
     let f = this.params.frequency;
-    const cv = this.freqConst.offset.value;
-    if (cv > 20) f = cv;
+    const hasCv = this.getPort('freq').connections.length > 0;
     const det = Math.pow(2, (this.params.detune || 0) / 1200);
     const pos = this._readPosition();
     const last = this._waves.length - 1;
@@ -419,8 +419,16 @@ export class Wavetable extends Module {
     this._voices.forEach((v) => {
       const vf = f * det * Math.pow(2, (v.cents || 0) / 1200);
       try {
-        v.oscA.frequency.setValueAtTime(vf, t);
-        v.oscB.frequency.setValueAtTime(vf, t);
+        // CV (Hz) entra por freqBus → frequency; base 0 si hay cable
+        v.oscA.frequency.setValueAtTime(hasCv ? 0 : vf, t);
+        v.oscB.frequency.setValueAtTime(hasCv ? 0 : vf, t);
+        if (hasCv && this.freqBus && !v._cvLinked) {
+          try {
+            this.freqBus.connect(v.oscA.frequency);
+            this.freqBus.connect(v.oscB.frequency);
+            v._cvLinked = true;
+          } catch (e) {}
+        }
         v.oscA.setPeriodicWave(this._waves[i0]);
         v.oscB.setPeriodicWave(this._waves[i1]);
         v.gA.gain.setValueAtTime(1 - frac, t);
@@ -458,7 +466,7 @@ export class Wavetable extends Module {
       } catch (e) {}
     });
     if (this.outGain) this.outGain.disconnect();
-    if (this.freqConst) this.freqConst.disconnect();
+    if (this.freqBus) try { this.freqBus.disconnect(); } catch(e) {}
     if (this.posConst) this.posConst.disconnect();
     super.destroy();
   }
