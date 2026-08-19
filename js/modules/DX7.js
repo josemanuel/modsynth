@@ -664,12 +664,13 @@ export class DX7 extends Module {
     this.fbGain = ctx.createGain();
     this.fbGain.gain.value = 0;
 
-    this.freqConst = this.audioEngine.createConstant(this.params.frequency);
+    this.freqBus = this.audioEngine.context.createGain();
+    this.freqBus.gain.value = 1;
     this.gateNode = ctx.createGain();
     this.gateNode.gain.value = 0;
 
     this.getPort('out').node = this.outGain;
-    this.getPort('freq').node = this.freqConst;
+    this.getPort('freq').node = this.freqBus;
     this.getPort('gate').node = this.gateNode;
 
     this._applyAlgorithm();
@@ -736,22 +737,33 @@ export class DX7 extends Module {
   }
 
   _baseFreq() {
-    let f = this.params.frequency;
-    if (this.freqConst) {
-      const cv = this.freqConst.offset.value;
-      if (cv > 20) f = cv;
-    }
-    return f;
+    return this.params.frequency;
+  }
+
+  _hasFreqCv() {
+    const p = this.getPort('freq');
+    return !!(p && p.connections && p.connections.length);
   }
 
   _syncFreq() {
     if (!this.ops.length || !this.audioEngine.context) return;
     const f = this._baseFreq();
+    const hasCv = this._hasFreqCv();
     const t = this.audioEngine.context.currentTime;
     for (let i = 0; i < 6; i++) {
       const freq = Math.min(20000, f * (this.params.ratios[i] || 1));
       try {
-        this.ops[i].osc.frequency.setValueAtTime(freq, t);
+        this.ops[i].osc.frequency.setValueAtTime(hasCv ? 0 : freq, t);
+        if (hasCv && this.freqBus && this.ops[i] && !this.ops[i]._cvLinked) {
+          const rg = this.audioEngine.context.createGain();
+          rg.gain.value = this.params.ratios[i] || 1;
+          this.freqBus.connect(rg);
+          rg.connect(this.ops[i].osc.frequency);
+          this.ops[i]._cvLinked = true;
+          this.ops[i]._ratioGain = rg;
+        } else if (this.ops[i] && this.ops[i]._ratioGain) {
+          this.ops[i]._ratioGain.gain.setValueAtTime(this.params.ratios[i] || 1, t);
+        }
       } catch (e) {}
     }
   }
@@ -760,6 +772,7 @@ export class DX7 extends Module {
     if (!this.ops.length || !this.audioEngine.context) return;
     const t = this.audioEngine.context.currentTime;
     const f = this._baseFreq();
+    const hasCv = this._hasFreqCv();
     const algo = ALGORITHMS[Math.max(0, Math.min(31, (this.params.algorithm || 1) - 1))];
     const carrierSet = new Set(algo.carriers);
 
@@ -771,7 +784,17 @@ export class DX7 extends Module {
 
       try {
         this.ops[i].osc.type = this.params.waves[i] || 'sine';
-        this.ops[i].osc.frequency.setValueAtTime(freq, t);
+        this.ops[i].osc.frequency.setValueAtTime(hasCv ? 0 : freq, t);
+        if (hasCv && this.freqBus && this.ops[i] && !this.ops[i]._cvLinked) {
+          const rg = this.audioEngine.context.createGain();
+          rg.gain.value = this.params.ratios[i] || 1;
+          this.freqBus.connect(rg);
+          rg.connect(this.ops[i].osc.frequency);
+          this.ops[i]._cvLinked = true;
+          this.ops[i]._ratioGain = rg;
+        } else if (this.ops[i] && this.ops[i]._ratioGain) {
+          this.ops[i]._ratioGain.gain.setValueAtTime(this.params.ratios[i] || 1, t);
+        }
         this.ops[i].levelGain.gain.setValueAtTime(scaled, t);
       } catch (e) {}
 
@@ -835,7 +858,7 @@ export class DX7 extends Module {
         op.modDepth.disconnect();
       } catch (e) {}
     });
-    [this.fbGain, this.mix, this.outGain, this.freqConst, this.gateNode].forEach((n) => {
+    [this.fbGain, this.mix, this.outGain, this.freqBus, this.gateNode].forEach((n) => {
       if (n) try { n.disconnect(); } catch (e) {}
     });
     super.destroy();

@@ -238,12 +238,13 @@ export class LA extends Module {
     this.lowerBus.connect(this.outGain);
     this.pcmGain.connect(this.outGain);
 
-    this.freqConst = this.audioEngine.createConstant(this.params.frequency);
+    this.freqBus = this.audioEngine.context.createGain();
+    this.freqBus.gain.value = 1;
     this.gateNode = ctx.createGain();
     this.gateNode.gain.value = 0;
 
     this.getPort('out').node = this.outGain;
-    this.getPort('freq').node = this.freqConst;
+    this.getPort('freq').node = this.freqBus;
     this.getPort('gate').node = this.gateNode;
 
     this._freqTimer = setInterval(() => this._syncFreq(), 25);
@@ -251,15 +252,25 @@ export class LA extends Module {
   }
 
   _syncFreq() {
-    if (!this.upper || !this.freqConst || !this.audioEngine.context) return;
-    let f = this.params.frequency;
-    const cv = this.freqConst.offset.value;
-    if (cv > 20) f = cv;
+    if (!this.upper || !this.freqBus || !this.audioEngine.context) return;
+    const f = this.params.frequency;
+    const hasCv = this.getPort('freq').connections.length > 0;
     const t = this.audioEngine.context.currentTime;
     const det = Math.pow(2, (this.params.lowerDetune || 0) / 1200);
     try {
-      this.upper.osc.frequency.setValueAtTime(f, t);
-      this.lower.osc.frequency.setValueAtTime(f * det, t);
+      this.upper.osc.frequency.setValueAtTime(hasCv ? 0 : f, t);
+      this.lower.osc.frequency.setValueAtTime(hasCv ? 0 : f * det, t);
+      if (hasCv && !this._cvLinked) {
+        this.freqBus.connect(this.upper.osc.frequency);
+        const rg = this.audioEngine.context.createGain();
+        rg.gain.value = det;
+        this.freqBus.connect(rg);
+        rg.connect(this.lower.osc.frequency);
+        this._cvLinked = true;
+        this._lowerRatio = rg;
+      } else if (this._lowerRatio) {
+        this._lowerRatio.gain.setValueAtTime(det, t);
+      }
     } catch (e) {}
   }
 
@@ -363,7 +374,7 @@ export class LA extends Module {
       try { tone.osc.stop(); tone.osc.disconnect(); } catch (e) {}
       try { tone.filter.disconnect(); tone.tone.disconnect(); tone.bus.disconnect(); } catch (e) {}
     });
-    [this.upperBus, this.lowerBus, this.pcmGain, this.outGain, this.freqConst, this.gateNode].forEach((n) => {
+    [this.upperBus, this.lowerBus, this.pcmGain, this.outGain, this.freqBus, this.gateNode].forEach((n) => {
       if (n) try { n.disconnect(); } catch (e) {}
     });
     super.destroy();
