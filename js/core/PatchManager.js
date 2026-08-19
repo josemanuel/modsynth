@@ -20,6 +20,7 @@ import { Additive } from '../modules/Additive.js';
 import { LA } from '../modules/LA.js';
 import { FM } from '../modules/FM.js';
 import { Granular } from '../modules/Granular.js';
+import { PhaseVocoder } from '../modules/PhaseVocoder.js';
 import { Wavetable } from '../modules/Wavetable.js';
 import { DX7 } from '../modules/DX7.js';
 import { Scope } from '../modules/Scope.js';
@@ -49,6 +50,7 @@ const MODULE_MAP = {
   la: LA,
   fm: FM,
   granular: Granular,
+  phasevocoder: PhaseVocoder,
   wavetable: Wavetable,
   dx7: DX7,
   scope: Scope,
