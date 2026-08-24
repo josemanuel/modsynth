@@ -122,7 +122,7 @@ export class Sequencer extends Module {
 
     this.el.querySelector('[data-action="play"]').addEventListener('click', () => this.play());
     this.el.querySelector('[data-action="stop"]').addEventListener('click', () => this.stop());
-    const sm = this.el.querySelector('[data-param="syncMode"]');
+    const  = this.el.querySelector('[data-param="syncMode"]');
     if (sm) {
       sm.value = this.params.syncMode || 'free';
       sm.addEventListener('change', (e) => {
@@ -137,10 +137,10 @@ export class Sequencer extends Module {
       });
     }
     this.el.querySelector('[data-action="fill-scale"]').addEventListener('click', () => this.fillScale());
-    const sm = this.el.querySelector('[data-param="scaleMode"]');
-    if (sm) {
-      sm.value = this.params.scaleMode;
-      sm.addEventListener('change', (e) => { this.params.scaleMode = e.target.value; });
+    const scm = this.el.querySelector('[data-param="scaleMode"]');
+    if (scm) {
+      scm.value = this.params.scaleMode;
+      scm.addEventListener('change', (e) => { this.params.scaleMode = e.target.value; });
     }
     const sr = this.el.querySelector('[data-param="scaleRoot"]');
     if (sr) {
