@@ -122,7 +122,7 @@ export class Sequencer extends Module {
 
     this.el.querySelector('[data-action="play"]').addEventListener('click', () => this.play());
     this.el.querySelector('[data-action="stop"]').addEventListener('click', () => this.stop());
-    const  = this.el.querySelector('[data-param="syncMode"]');
+    const sm = this.el.querySelector('[data-param="syncMode"]');
     if (sm) {
       sm.value = this.params.syncMode || 'free';
       sm.addEventListener('change', (e) => {
