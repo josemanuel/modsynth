@@ -1,4 +1,5 @@
 import { Module } from '../core/Module.js';
+import { ClockBus, divisionToHz } from '../core/ClockBus.js';
 
 export class LFO extends Module {
   constructor(audioEngine, x, y) {
@@ -10,17 +11,28 @@ export class LFO extends Module {
       depth: 1
     };
 
+    this.addPort('clockIn', 'Clk In', 'gate', 'in');
+    this.addPort('clockOut', 'Clk Out', 'gate', 'out');
     this.addPort('out', 'Out', 'cv', 'out');
   }
 
   renderBody() {
     return `
       <div class="ports-row">
-        <div class="ports-col"></div>
+        <div class="ports-col">
+          <div class="port input">
+            <div class="port-socket gate" data-port="clockIn"></div>
+            <span>Clk In</span>
+          </div>
+        </div>
         <div class="ports-col">
           <div class="port output">
             <div class="port-socket cv" data-port="out"></div>
             <span>Out</span>
+          </div>
+          <div class="port output">
+            <div class="port-socket gate" data-port="clockOut"></div>
+            <span>Clk Out</span>
           </div>
         </div>
       </div>
@@ -31,6 +43,22 @@ export class LFO extends Module {
           <option value="triangle">Triangle</option>
           <option value="sawtooth">Saw</option>
           <option value="square">Square</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Sync</label>
+        <select data-param="syncMode">
+          <option value="free">Free (Hz)</option>
+          <option value="master">Master</option>
+          <option value="slave">Slave</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>División</label>
+        <select data-param="division">
+          <option value="1/1">1/1</option><option value="1/2">1/2</option>
+          <option value="1/4" selected>1/4</option><option value="1/8">1/8</option>
+          <option value="1/16">1/16</option><option value="1/32">1/32</option>
         </select>
       </div>
       <div class="control">
@@ -74,6 +102,25 @@ export class LFO extends Module {
     this.osc = ctx.createOscillator();
     this.osc.type = this.params.waveform;
     this.osc.frequency.value = this.params.rate;
+    this.clockOutNode = this.audioEngine.createConstant(0);
+    this.clockInNode = this.audioEngine.createConstant(0);
+    if (this.getPort('clockOut')) this.getPort('clockOut').node = this.clockOutNode;
+    if (this.getPort('clockIn')) this.getPort('clockIn').node = this.clockInNode;
+    this._clockUnsub = ClockBus.subscribe((ev) => {
+      if (ev.type === 'bpm' || ev.type === 'start' || (ev.type === 'tick' && ev.isBeat)) {
+        this.applyParams();
+      }
+      if (ev.type === 'tick' && (this.params.syncMode === 'master' || this.params.syncMode === 'slave')) {
+        if (ClockBus.matchesDivision(this.params.division, ev.tick)) {
+          // soft pulse out
+          if (this.clockOutNode && this.audioEngine.context) {
+            const t = this.audioEngine.context.currentTime;
+            this.clockOutNode.offset.setValueAtTime(1, t);
+            this.clockOutNode.offset.setValueAtTime(0, t + 0.008);
+          }
+        }
+      }
+    });
     this.osc.start();
 
     this.depthGain = ctx.createGain();
@@ -87,11 +134,18 @@ export class LFO extends Module {
     if (!this.osc) return;
     const t = this.audioEngine.context.currentTime;
     this.osc.type = this.params.waveform;
-    this.osc.frequency.setValueAtTime(this.params.rate, t);
+    let rate = this.params.rate;
+    if (this.params.syncMode === 'master' || this.params.syncMode === 'slave') {
+      const bpm = ClockBus.bpm || 120;
+      rate = divisionToHz(this.params.division, bpm);
+    }
+    this.osc.frequency.setValueAtTime(rate, t);
     this.depthGain.gain.setValueAtTime(this.params.depth, t);
   }
 
   destroy() {
+    if (this._clockUnsub) this._clockUnsub();
+    ClockBus.stop(this.id);
     if (this.osc) {
       try { this.osc.stop(); this.osc.disconnect(); } catch(e){}
     }

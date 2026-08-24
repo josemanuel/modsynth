@@ -2,6 +2,7 @@ import { AudioEngine } from './core/AudioEngine.js';
 import { PatchManager } from './core/PatchManager.js';
 import { Wire } from './core/Wire.js';
 import { MidiManager } from './core/MidiManager.js';
+import { ClockBus } from './core/ClockBus.js';
 
 const audioEngine = new AudioEngine();
 const midi = new MidiManager();
@@ -355,10 +356,8 @@ contextMenu.querySelectorAll('button[data-type]').forEach(btn => {
 let wiringFrom = null; // Port
 let previewPath = null;
 
-canvasContainer.addEventListener('mousedown', e => {
-  const socket = e.target.closest('.port-socket');
+function startWiring(socket, e) {
   if (!socket) return;
-
   e.stopPropagation();
   e.preventDefault();
 
@@ -370,29 +369,57 @@ canvasContainer.addEventListener('mousedown', e => {
   if (!port) return;
 
   wiringFrom = port;
+  const ptrId = e.pointerId;
 
-  // Preview line
   previewPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   previewPath.classList.add(port.type, 'preview');
   wiresSvg.appendChild(previewPath);
 
-  const onMove = ev => {
+  try {
+    socket.setPointerCapture(ptrId);
+  } catch (err) {}
+
+  const onMove = (ev) => {
+    if (ev.pointerId !== ptrId) return;
     if (!wiringFrom || !previewPath) return;
     const p1 = wiringFrom.module.getPortPosition(wiringFrom.id);
     const p2 = clientToWorld(ev.clientX, ev.clientY);
     previewPath.setAttribute('d', Wire.makePath(p1.x, p1.y, p2.x, p2.y));
+    ev.preventDefault();
   };
 
-  const onUp = ev => {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
+  const onUp = (ev) => {
+    if (ev.pointerId !== ptrId) return;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    try {
+      socket.releasePointerCapture(ptrId);
+    } catch (err) {}
 
     if (previewPath) {
       previewPath.remove();
       previewPath = null;
     }
 
-    const targetSocket = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.port-socket');
+    // elementFromPoint puede fallar bajo el dedo: probar varios offsets
+    let targetSocket = null;
+    const pts = [
+      [ev.clientX, ev.clientY],
+      [ev.clientX, ev.clientY - 12],
+      [ev.clientX, ev.clientY + 12],
+      [ev.clientX - 12, ev.clientY],
+      [ev.clientX + 12, ev.clientY]
+    ];
+    for (const [x, y] of pts) {
+      const el = document.elementFromPoint(x, y);
+      const s = el && el.closest && el.closest('.port-socket');
+      if (s && s !== socket) {
+        targetSocket = s;
+        break;
+      }
+    }
+
     if (targetSocket && wiringFrom) {
       const tModId = targetSocket.dataset.moduleId;
       const tPortId = targetSocket.dataset.portId;
@@ -407,9 +434,21 @@ canvasContainer.addEventListener('mousedown', e => {
     wiringFrom = null;
   };
 
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-});
+  document.addEventListener('pointermove', onMove, { passive: false });
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+}
+
+canvasContainer.addEventListener(
+  'pointerdown',
+  (e) => {
+    const socket = e.target.closest('.port-socket');
+    if (!socket) return;
+    if (e.button != null && e.button !== 0) return;
+    startWiring(socket, e);
+  },
+  { passive: false }
+);
 
 // ========== EXPORT / IMPORT ==========
 btnExport?.addEventListener('click', () => {
@@ -903,4 +942,4 @@ document.getElementById('canvas-container')?.addEventListener('click', (e) => {
   }
 });
 
-window.modularSynth = { audioEngine, patch, midi, zoom: 1, setZoom };
+window.modularSynth = { audioEngine, patch, midi, clock: ClockBus, zoom: 1, setZoom };

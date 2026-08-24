@@ -235,6 +235,8 @@ select {
   flex: 1;
   position: relative;
   overflow: auto;
+  /* scroll del canvas; los hijos con touch-action:none gestionan gestos propios */
+  touch-action: pan-x pan-y;
   background:
     radial-gradient(circle at 1px 1px, #1a1f2a 1px, transparent 0) 0 0 / 20px 20px;
   background-color: #0a0c10;

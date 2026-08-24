@@ -1,0 +1,38 @@
+{
+  "name": "PolySynth 6 voces",
+  "modules": [
+    {
+      "id": "mod_1",
+      "type": "polysynth",
+      "x": 80,
+      "y": 80,
+      "params": {
+        "numVoices": 6,
+        "waveform": "sawtooth",
+        "cutoff": 2800,
+        "Q": 2.5,
+        "attack": 0.02,
+        "decay": 0.25,
+        "sustain": 0.6,
+        "release": 0.4,
+        "gain": 0.4,
+        "pcKeys": true
+      }
+    },
+    {
+      "id": "mod_2",
+      "type": "output",
+      "x": 360,
+      "y": 120,
+      "params": {
+        "volume": 0.7
+      }
+    }
+  ],
+  "wires": [
+    {
+      "from": "mod_1:out",
+      "to": "mod_2:in"
+    }
+  ]
+}

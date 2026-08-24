@@ -1,4 +1,6 @@
 import { Module } from '../core/Module.js';
+import { AudioEngine } from '../core/AudioEngine.js';
+import { allocateVoice, findVoiceByNote, triggerEnv } from '../core/VoiceAllocator.js';
 
 /**
  * DX7-style 6-op FM + EG por operador + escalado de nivel 0–99.
@@ -192,6 +194,8 @@ export class DX7 extends Module {
     this.title = 'DX7 FM';
     this.width = 320;
     this.params = {
+      numVoices: 4,
+      steal: 'oldest',
       frequency: 220,
       algorithm: 1,
       feedback: 0.25,
@@ -269,6 +273,10 @@ export class DX7 extends Module {
       '<div class="control">' +
       '<label>Feedback <span class="value-display" data-display="feedback">0.25</span></label>' +
       '<input type="range" data-param="feedback" min="0" max="1" step="0.01" value="0.25" />' +
+      '</div>' +
+      '<div class="control">' +
+      '<label>Voces <span class="value-display" data-display="numVoices">4</span></label>' +
+      '<input type="range" data-param="numVoices" min="1" max="4" step="1" value="4" />' +
       '</div>' +
       '<div class="control">' +
       '<label>Freq <span class="value-display" data-display="frequency">220 Hz</span></label>' +
@@ -673,9 +681,47 @@ export class DX7 extends Module {
     this.getPort('freq').node = this.freqBus;
     this.getPort('gate').node = this.gateNode;
 
+    this.voiceEngines = [{ ops: this.ops, note: null, order: 0 }];
+    // 3 voces extra (total 4) — algoritmo simplificado por voz
+    for (let v = 0; v < 3; v++) {
+      const ops = [];
+      for (let i = 0; i < 6; i++) {
+        const osc = ctx.createOscillator();
+        osc.type = this.params.waves[i] || 'sine';
+        osc.frequency.value = this.params.frequency * (this.params.ratios[i] || 1);
+        const envGain = ctx.createGain();
+        envGain.gain.value = 0;
+        const levelGain = ctx.createGain();
+        levelGain.gain.value = dxLevelScale(this.params.levels[i]);
+        const outLevel = ctx.createGain();
+        outLevel.gain.value = 0;
+        const modDepth = ctx.createGain();
+        modDepth.gain.value = 0;
+        osc.connect(envGain);
+        envGain.connect(levelGain);
+        levelGain.connect(outLevel);
+        levelGain.connect(modDepth);
+        osc.start();
+        ops.push({ osc, envGain, levelGain, outLevel, modDepth });
+      }
+      const algo = ALGORITHMS[Math.max(0, Math.min(31, (this.params.algorithm || 1) - 1))];
+      algo.carriers.forEach((ci) => {
+        try {
+          ops[ci].outLevel.connect(this.mix);
+          ops[ci].outLevel.gain.value = 0.45;
+        } catch (e) {}
+      });
+      (algo.edges || []).forEach(([from, to]) => {
+        try { ops[from].modDepth.connect(ops[to].osc.frequency); } catch (e) {}
+      });
+      this.voiceEngines.push({ ops, note: null, order: 0 });
+    }
+
     this._applyAlgorithm();
     this._timer = setInterval(() => this._syncFreq(), 25);
     this.applyParams();
+    this._bindPolyNotes();
+    setTimeout(() => this._bindPolyNotes(), 500);
   }
 
   _clearAlgoConnections() {
@@ -818,37 +864,143 @@ export class DX7 extends Module {
     this._updateFeedback();
   }
 
-  /**
-   * Dispara EG de los 6 operadores.
-   * Velocity 0–1 afecta el pico según velSens de cada OP.
-   */
-  trigger(on, velocity) {
-    if (velocity == null) velocity = 1;
-    if (!this.ops.length || !this.audioEngine.context) return;
+  _triggerVoiceOps(ops, on, velocity) {
+    if (!ops || !ops.length || !this.audioEngine.context) return;
     const t = this.audioEngine.context.currentTime;
-    this._lastVel = velocity;
-
     for (let i = 0; i < 6; i++) {
       const eg = this.params.eg[i] || defaultEG();
-      const g = this.ops[i].envGain.gain;
-      // pico: (1 - sens) + sens * velocity
+      const g = ops[i].envGain.gain;
       const peak = (1 - eg.velSens) + eg.velSens * Math.max(0.05, Math.min(1, velocity));
-
       g.cancelScheduledValues(t);
       if (on) {
-        g.setValueAtTime(g.value, t);
+        g.setValueAtTime(Math.max(0, g.value), t);
         g.linearRampToValueAtTime(peak, t + eg.a);
         g.linearRampToValueAtTime(peak * eg.s, t + eg.a + eg.d);
       } else {
-        g.setValueAtTime(g.value, t);
-        g.linearRampToValueAtTime(0, t + eg.r);
+        g.setValueAtTime(Math.max(0, g.value), t);
+        g.linearRampToValueAtTime(0, t + (on ? eg.r : Math.min(eg.r, 0.5)));
       }
     }
   }
 
+  /**
+   * Gate mono (compatibilidad).
+   */
+  trigger(on, velocity) {
+    if (velocity == null) velocity = 1;
+    if (on) {
+      let f = this.params.frequency;
+      if (this.getPort('freq').connections.length) {
+        // CV Hz
+        f = f;
+      }
+      const midi = Math.round(69 + 12 * Math.log2(Math.max(20, f) / 440));
+      this.noteOn(midi, velocity);
+    } else {
+      (this.voiceEngines || []).forEach((ve) => {
+        if (ve.note != null) {
+          this._triggerVoiceOps(ve.ops, false, 0);
+          ve.note = null;
+        }
+      });
+      this._renderPolyLeds();
+    }
+  }
+
+  noteOn(midi, velocity) {
+    if (velocity == null) velocity = 1;
+    if (!this.voiceEngines || !this.voiceEngines.length) {
+      // fallback mono
+      if (this.ops.length) {
+        const freq = AudioEngine.midiToFreq(midi);
+        this.params.frequency = freq;
+        this.applyParams();
+        this._triggerVoiceOps(this.ops, true, velocity);
+      }
+      return;
+    }
+    const n = Math.min(4, this.params.numVoices || 4);
+    const idx = allocateVoice(this.voiceEngines, n, midi, this.params.steal || 'oldest');
+    const ve = this.voiceEngines[idx];
+    if (ve.note != null && ve.note !== midi) {
+      this._triggerVoiceOps(ve.ops, false, 0);
+    }
+    ve.note = midi;
+    ve.order = ++this._noteOrder;
+    const freq = AudioEngine.midiToFreq(midi);
+    const t = this.audioEngine.context.currentTime;
+    for (let i = 0; i < 6; i++) {
+      try {
+        ve.ops[i].osc.frequency.setValueAtTime(
+          Math.min(20000, freq * (this.params.ratios[i] || 1)),
+          t
+        );
+      } catch (e) {}
+    }
+    this._triggerVoiceOps(ve.ops, true, velocity);
+    this._renderPolyLeds();
+  }
+
+  noteOff(midi) {
+    if (!this.voiceEngines) return;
+    const n = Math.min(4, this.params.numVoices || 4);
+    const idx = findVoiceByNote(this.voiceEngines, n, midi);
+    if (idx < 0) return;
+    this._triggerVoiceOps(this.voiceEngines[idx].ops, false, 0);
+    this.voiceEngines[idx].note = null;
+    this._renderPolyLeds();
+  }
+
+  _renderPolyLeds() {
+    const host = this.el && this.el.querySelector('[data-poly-leds]');
+    if (!host || !this.voiceEngines) return;
+    const n = Math.min(4, this.params.numVoices || 4);
+    let html = '';
+    for (let i = 0; i < n; i++) {
+      const on = this.voiceEngines[i] && this.voiceEngines[i].note != null;
+      html += '<span class="ps-led' + (on ? ' on' : '') + '">' + (i + 1) + '</span>';
+    }
+    host.innerHTML = html;
+  }
+
+  _bindPolyNotes() {
+    if (this._polyBound) return;
+    this._polyBound = true;
+    this._noteOrder = 0;
+    this._onNote = (ev) => {
+      const d = ev.detail || {};
+      if (d.note == null) return;
+      if (d.on) this.noteOn(d.note, d.velocity != null ? d.velocity : 1);
+      else this.noteOff(d.note);
+    };
+    window.addEventListener('modsynth-note', this._onNote);
+    try {
+      const midi = window.modularSynth && window.modularSynth.midi;
+      if (midi && typeof midi.on === 'function') {
+        this._unsubMidi = midi.on((type, data) => {
+          if (type === 'noteon') this.noteOn(data.note, data.velocity != null ? data.velocity : 1);
+          else if (type === 'noteoff') this.noteOff(data.note);
+        });
+      }
+    } catch (e) {}
+  }
+
   destroy() {
+    if (this._onNote) window.removeEventListener('modsynth-note', this._onNote);
+    if (typeof this._unsubMidi === 'function') try { this._unsubMidi(); } catch (e) {}
     if (this._timer) clearInterval(this._timer);
     this._clearAlgoConnections();
+    (this.voiceEngines || [{ ops: this.ops }]).forEach((ve) => {
+      (ve.ops || []).forEach((op) => {
+        try { op.osc.stop(); op.osc.disconnect(); } catch (e) {}
+        try {
+          op.envGain.disconnect();
+          op.levelGain.disconnect();
+          op.outLevel.disconnect();
+          op.modDepth.disconnect();
+        } catch (e) {}
+      });
+    });
     this.ops.forEach((op) => {
       try { op.osc.stop(); op.osc.disconnect(); } catch (e) {}
       try {

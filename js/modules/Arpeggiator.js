@@ -1,5 +1,6 @@
 import { Module } from '../core/Module.js';
 import { AudioEngine } from '../core/AudioEngine.js';
+import { ClockBus, divisionToTicks, divisionToHz } from '../core/ClockBus.js';
 
 /**
  * Arpeggiator clásico.
@@ -14,10 +15,13 @@ export class Arpeggiator extends Module {
     this.params = {
       mode: 'up',
       octaves: 1,
-      rate: 8, // notes per beat-ish: Hz of steps
+      rate: 8, // Hz in free mode
       latch: false,
-      gateLen: 0.5
+      gateLen: 0.5,
+      syncMode: 'free',
+      division: '1/8'
     };
+    this._clockUnsub = null;
     this.heldNotes = []; // midi notes held
     this.pattern = [];
     this.patternIndex = 0;
@@ -25,18 +29,37 @@ export class Arpeggiator extends Module {
     this.timer = null;
     this.direction = 1;
 
+    this.addPort('clockIn', 'Clk In', 'gate', 'in');
     this.addPort('cv', 'CV', 'cv', 'out');
     this.addPort('gate', 'Gate', 'gate', 'out');
+    this.addPort('clockOut', 'Clk Out', 'gate', 'out');
   }
 
   renderBody() {
     return `
       <div class="ports-row">
-        <div class="ports-col"></div>
+        <div class="ports-col">
+          <div class="port input"><div class="port-socket gate" data-port="clockIn"></div><span>Clk In</span></div>
+        </div>
         <div class="ports-col">
           <div class="port output"><div class="port-socket cv" data-port="cv"></div><span>CV</span></div>
           <div class="port output"><div class="port-socket gate" data-port="gate"></div><span>Gate</span></div>
+          <div class="port output"><div class="port-socket gate" data-port="clockOut"></div><span>Clk Out</span></div>
         </div>
+      </div>
+      <div class="control"><label>Sync</label>
+        <select data-param="syncMode">
+          <option value="free">Free (Hz)</option>
+          <option value="master">Master</option>
+          <option value="slave">Slave</option>
+        </select>
+      </div>
+      <div class="control"><label>División</label>
+        <select data-param="division">
+          <option value="1/1">1/1</option><option value="1/2">1/2</option>
+          <option value="1/4">1/4</option><option value="1/8" selected>1/8</option>
+          <option value="1/16">1/16</option><option value="1/32">1/32</option>
+        </select>
       </div>
       <div class="control">
         <label>Mode</label>
@@ -130,8 +153,28 @@ export class Arpeggiator extends Module {
     if (!ctx) return;
     this.freqNode = this.audioEngine.createConstant(0);
     this.gateNode = this.audioEngine.createConstant(0);
+    this.clockOutNode = this.audioEngine.createConstant(0);
+    this.clockInNode = this.audioEngine.createConstant(0);
     this.getPort('cv').node = this.freqNode;
     this.getPort('gate').node = this.gateNode;
+    this.getPort('clockOut').node = this.clockOutNode;
+    this.getPort('clockIn').node = this.clockInNode;
+
+    this._clockUnsub = ClockBus.subscribe((ev) => {
+      if (!this.isRunning) return;
+      if ((this.params.syncMode || 'free') === 'free') return;
+      if (ev.type === 'tick' && ClockBus.matchesDivision(this.params.division, ev.tick)) {
+        this._stepOnce();
+        this._pulseClockOut();
+      }
+    });
+  }
+
+  _pulseClockOut() {
+    if (!this.clockOutNode || !this.audioEngine.context) return;
+    const t = this.audioEngine.context.currentTime;
+    this.clockOutNode.offset.setValueAtTime(1, t);
+    this.clockOutNode.offset.setValueAtTime(0, t + 0.008);
   }
 
   noteOn(midi, velocity = 1) {
@@ -182,24 +225,34 @@ export class Arpeggiator extends Module {
 
   _startClock() {
     this.isRunning = true;
-    this._tick();
+    const mode = this.params.syncMode || 'free';
+    if (mode === 'master') {
+      // BPM from rate≈ approx: use 120 default or ClockBus
+      if (!ClockBus.running) {
+        ClockBus.setBpm(ClockBus.bpm || 120);
+        ClockBus.start(this.id);
+      }
+    }
+    if (mode === 'free') this._tickFree();
   }
 
   _stopClock() {
     this.isRunning = false;
-    if (this.timer) clearTimeout(this.timer);
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if ((this.params.syncMode || 'free') === 'master') {
+      ClockBus.stop(this.id);
+    }
     if (this.gateNode && this.audioEngine.context) {
       this.gateNode.offset.setValueAtTime(0, this.audioEngine.context.currentTime);
       this._notifyGate(false);
     }
   }
 
-  _tick() {
-    if (!this.isRunning || !this.pattern.length) {
-      this.isRunning = false;
-      return;
-    }
-
+  _stepOnce() {
+    if (!this.isRunning || !this.pattern.length || !this.audioEngine.context) return;
     let note;
     if (this.params.mode === 'random') {
       note = this.pattern[Math.floor(Math.random() * this.pattern.length)];
@@ -207,23 +260,35 @@ export class Arpeggiator extends Module {
       note = this.pattern[this.patternIndex % this.pattern.length];
       this.patternIndex = (this.patternIndex + 1) % this.pattern.length;
     }
-
     const t = this.audioEngine.context.currentTime;
-    const freq = AudioEngine.midiToFreq(note);
-    this.freqNode.offset.setValueAtTime(freq, t);
+    this.freqNode.offset.setValueAtTime(AudioEngine.midiToFreq(note), t);
     this.gateNode.offset.setValueAtTime(1, t);
     this._notifyGate(true);
 
-    const stepMs = 1000 / Math.max(0.1, this.params.rate);
+    const bpm = ClockBus.running ? ClockBus.bpm : 120;
+    let stepMs;
+    if ((this.params.syncMode || 'free') === 'free') {
+      stepMs = 1000 / Math.max(0.1, this.params.rate);
+    } else {
+      stepMs = divisionToTicks(this.params.division) * ((60 / bpm) * 1000) / 8;
+    }
     const gateMs = stepMs * this.params.gateLen;
-
     setTimeout(() => {
       if (!this.isRunning) return;
       this.gateNode.offset.setValueAtTime(0, this.audioEngine.context.currentTime);
       this._notifyGate(false);
-    }, gateMs);
+    }, Math.max(10, gateMs));
+  }
 
-    this.timer = setTimeout(() => this._tick(), stepMs);
+  _tickFree() {
+    if (!this.isRunning || !this.pattern.length) {
+      this.isRunning = false;
+      return;
+    }
+    this._stepOnce();
+    this._pulseClockOut();
+    const stepMs = 1000 / Math.max(0.1, this.params.rate);
+    this.timer = setTimeout(() => this._tickFree(), stepMs);
   }
 
   _notifyGate(on) {
@@ -246,6 +311,7 @@ export class Arpeggiator extends Module {
 
   destroy() {
     this._stopClock();
+    if (this._clockUnsub) this._clockUnsub();
     window.removeEventListener('modsynth-note', this._onNoteEvent);
     if (this.freqNode) this.freqNode.disconnect();
     if (this.gateNode) this.gateNode.disconnect();

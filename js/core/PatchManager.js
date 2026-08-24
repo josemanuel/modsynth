@@ -11,11 +11,13 @@ import { Reverb } from '../modules/Reverb.js';
 import { Chorus } from '../modules/Chorus.js';
 import { Keyboard } from '../modules/Keyboard.js';
 import { Sequencer } from '../modules/Sequencer.js';
+import { Clock } from '../modules/Clock.js';
 import { Output } from '../modules/Output.js';
 import { MidiCC } from '../modules/MidiCC.js';
 import { Sample } from '../modules/Sample.js';
 import { Arpeggiator } from '../modules/Arpeggiator.js';
 import { Voices } from '../modules/Voices.js';
+import { PolySynth } from '../modules/PolySynth.js';
 import { Additive } from '../modules/Additive.js';
 import { LA } from '../modules/LA.js';
 import { FM } from '../modules/FM.js';
@@ -41,11 +43,13 @@ const MODULE_MAP = {
   chorus: Chorus,
   keyboard: Keyboard,
   sequencer: Sequencer,
+  clock: Clock,
   output: Output,
   midicc: MidiCC,
   sample: Sample,
   arp: Arpeggiator,
   voices: Voices,
+  polysynth: PolySynth,
   additive: Additive,
   la: LA,
   fm: FM,
@@ -376,29 +380,52 @@ export class PatchManager {
 
   _makeDraggable(mod) {
     const header = mod.el.querySelector('.module-header');
-    let startX, startY, origX, origY;
+    if (!header) return;
+    // Evita que el canvas capture el gesto de scroll al arrastrar
+    header.style.touchAction = 'none';
+    if (mod.el) mod.el.style.touchAction = 'manipulation';
 
-    const onMove = e => {
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+    let startX, startY, origX, origY, activePtr = null;
+
+    const onMove = (e) => {
+      if (activePtr != null && e.pointerId !== activePtr) return;
+      const z = (window.modularSynth && window.modularSynth.zoom) || 1;
+      const dx = (e.clientX - startX) / z;
+      const dy = (e.clientY - startY) / z;
       mod.setPosition(origX + dx, origY + dy);
       this.updateAllWires();
-    };
-
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
-    header.addEventListener('mousedown', e => {
-      if (e.target.classList.contains('module-close')) return;
       e.preventDefault();
+    };
+
+    const onUp = (e) => {
+      if (activePtr != null && e.pointerId !== activePtr) return;
+      activePtr = null;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      try {
+        if (e.pointerId != null) header.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+      mod.el && mod.el.classList.remove('dragging');
+    };
+
+    header.addEventListener('pointerdown', (e) => {
+      if (e.target.classList.contains('module-close')) return;
+      if (e.button != null && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      activePtr = e.pointerId;
       startX = e.clientX;
       startY = e.clientY;
       origX = mod.x;
       origY = mod.y;
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      mod.el && mod.el.classList.add('dragging');
+      try {
+        header.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      document.addEventListener('pointermove', onMove, { passive: false });
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
     });
   }
 

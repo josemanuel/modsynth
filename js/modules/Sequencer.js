@@ -1,5 +1,6 @@
 import { Module } from '../core/Module.js';
 import { AudioEngine } from '../core/AudioEngine.js';
+import { ClockBus, syncModeSelectHtml, divisionSelectHtml, divisionToTicks } from '../core/ClockBus.js';
 
 const MAX_STEPS = 32;
 const NOTE_MIN = 0;   // rest
@@ -23,24 +24,49 @@ export class Sequencer extends Module {
       length: 16,
       steps: defaultSteps(MAX_STEPS),
       scaleMode: 'chromatic',
-      scaleRoot: 0
+      scaleRoot: 0,
+      syncMode: 'free', // free | master | slave
+      division: '1/16'
     };
     this.currentStep = 0;
     this.isPlaying = false;
     this.timer = null;
+    this._clockUnsub = null;
 
+    this.addPort('clockIn', 'Clk In', 'gate', 'in');
     this.addPort('cv', 'CV', 'cv', 'out');
     this.addPort('gate', 'Gate', 'gate', 'out');
+    this.addPort('clockOut', 'Clk Out', 'gate', 'out');
   }
 
   renderBody() {
     return `
       <div class="ports-row">
-        <div class="ports-col"></div>
+        <div class="ports-col">
+          <div class="port input"><div class="port-socket gate" data-port="clockIn"></div><span>Clk In</span></div>
+        </div>
         <div class="ports-col">
           <div class="port output"><div class="port-socket cv" data-port="cv"></div><span>CV</span></div>
           <div class="port output"><div class="port-socket gate" data-port="gate"></div><span>Gate</span></div>
+          <div class="port output"><div class="port-socket gate" data-port="clockOut"></div><span>Clk Out</span></div>
         </div>
+      </div>
+      <div class="control"><label>Sync</label>
+        <select data-param="syncMode">
+          <option value="free">Free (BPM)</option>
+          <option value="master">Master</option>
+          <option value="slave">Slave</option>
+        </select>
+      </div>
+      <div class="control"><label>División</label>
+        <select data-param="division">
+          <option value="1/1">1/1</option>
+          <option value="1/2">1/2</option>
+          <option value="1/4">1/4</option>
+          <option value="1/8">1/8</option>
+          <option value="1/16" selected>1/16</option>
+          <option value="1/32">1/32</option>
+        </select>
       </div>
       <div class="control">
         <label>Steps <span class="value-display" data-display="length">${this.params.length}</span></label>
@@ -96,6 +122,20 @@ export class Sequencer extends Module {
 
     this.el.querySelector('[data-action="play"]').addEventListener('click', () => this.play());
     this.el.querySelector('[data-action="stop"]').addEventListener('click', () => this.stop());
+    const sm = this.el.querySelector('[data-param="syncMode"]');
+    if (sm) {
+      sm.value = this.params.syncMode || 'free';
+      sm.addEventListener('change', (e) => {
+        this.params.syncMode = e.target.value;
+      });
+    }
+    const dv = this.el.querySelector('[data-param="division"]');
+    if (dv) {
+      dv.value = this.params.division || '1/16';
+      dv.addEventListener('change', (e) => {
+        this.params.division = e.target.value;
+      });
+    }
     this.el.querySelector('[data-action="fill-scale"]').addEventListener('click', () => this.fillScale());
     const sm = this.el.querySelector('[data-param="scaleMode"]');
     if (sm) {
@@ -196,56 +236,103 @@ export class Sequencer extends Module {
     if (!ctx) return;
     this.freqNode = this.audioEngine.createConstant(0);
     this.gateNode = this.audioEngine.createConstant(0);
+    this.clockOutNode = this.audioEngine.createConstant(0);
+    this.clockInNode = this.audioEngine.createConstant(0);
     this.getPort('cv').node = this.freqNode;
     this.getPort('gate').node = this.gateNode;
+    this.getPort('clockOut').node = this.clockOutNode;
+    this.getPort('clockIn').node = this.clockInNode;
+
+    this._clockUnsub = ClockBus.subscribe((ev) => {
+      if (!this.isPlaying) return;
+      if (this.params.syncMode === 'free') return;
+      if (ev.type === 'tick' && ClockBus.matchesDivision(this.params.division, ev.tick)) {
+        this._advanceStep();
+        this._pulseClockOut();
+      }
+      if (ev.type === 'stop' && this.params.syncMode === 'slave') {
+        // keep isPlaying but no ticks until master returns
+      }
+    });
+  }
+
+  _pulseClockOut() {
+    if (!this.clockOutNode || !this.audioEngine.context) return;
+    const t = this.audioEngine.context.currentTime;
+    this.clockOutNode.offset.setValueAtTime(1, t);
+    this.clockOutNode.offset.setValueAtTime(0, t + 0.008);
   }
 
   play() {
     if (this.isPlaying) return;
     this.isPlaying = true;
     this.currentStep = 0;
-    this._tick();
+    const mode = this.params.syncMode || 'free';
+    if (mode === 'master') {
+      ClockBus.setBpm(this.params.bpm);
+      ClockBus.start(this.id);
+    }
+    if (mode === 'free') {
+      this._tickFree();
+    }
+    // master/slave: steps on ClockBus ticks
   }
 
   stop() {
     this.isPlaying = false;
-    if (this.timer) clearTimeout(this.timer);
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if ((this.params.syncMode || 'free') === 'master') {
+      ClockBus.stop(this.id);
+    }
     if (this.gateNode && this.audioEngine.context) {
       this.gateNode.offset.setValueAtTime(0, this.audioEngine.context.currentTime);
       this._notifyGate(false);
     }
-    this.el.querySelectorAll('.seq-col').forEach((el) => el.classList.remove('playing'));
+    if (this.el) this.el.querySelectorAll('.seq-col').forEach((el) => el.classList.remove('playing'));
   }
 
-  _tick() {
-    if (!this.isPlaying) return;
+  /** Avance de un paso (sync o free) */
+  _advanceStep() {
+    if (!this.isPlaying || !this.audioEngine.context) return;
     const len = Math.max(1, Math.min(MAX_STEPS, this.params.length));
     const step = this.params.steps[this.currentStep] || 0;
     const t = this.audioEngine.context.currentTime;
-
-    this.el.querySelectorAll('.seq-col').forEach((el, i) => {
-      el.classList.toggle('playing', i === this.currentStep);
-    });
-
+    if (this.el) {
+      this.el.querySelectorAll('.seq-col').forEach((el, i) => {
+        el.classList.toggle('playing', i === this.currentStep);
+      });
+    }
+    const bpm = ClockBus.running ? ClockBus.bpm : this.params.bpm;
     if (step > 0) {
       const freq = AudioEngine.midiToFreq(step);
       this.freqNode.offset.setValueAtTime(freq, t);
       this.gateNode.offset.setValueAtTime(1, t);
       this._notifyFreqTargets();
       this._notifyGate(true);
+      const gateMs = divisionToTicks(this.params.division) * ((60 / bpm) * 1000) / 8 * 0.55;
       setTimeout(() => {
         if (!this.isPlaying) return;
         this.gateNode.offset.setValueAtTime(0, this.audioEngine.context.currentTime);
         this._notifyGate(false);
-      }, (60 / this.params.bpm) * 1000 * 0.55);
+      }, Math.max(20, gateMs));
     } else {
       this.gateNode.offset.setValueAtTime(0, t);
       this._notifyGate(false);
     }
-
     this.currentStep = (this.currentStep + 1) % len;
+  }
+
+  _tickFree() {
+    if (!this.isPlaying) return;
+    if ((this.params.syncMode || 'free') !== 'free') return;
+    this._advanceStep();
+    this._pulseClockOut();
+    // en free: paso = 1/4 negra a BPM local
     const ms = (60 / this.params.bpm) * 1000;
-    this.timer = setTimeout(() => this._tick(), ms);
+    this.timer = setTimeout(() => this._tickFree(), ms);
   }
 
   _notifyFreqTargets() {
@@ -279,6 +366,7 @@ export class Sequencer extends Module {
 
   destroy() {
     this.stop();
+    if (this._clockUnsub) this._clockUnsub();
     if (this.freqNode) this.freqNode.disconnect();
     if (this.gateNode) this.gateNode.disconnect();
     super.destroy();

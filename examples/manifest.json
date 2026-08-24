@@ -2,26 +2,26 @@
   "examples": [
     {
       "id": "basic-synth",
-      "name": "Sintetizador básico",
-      "description": "Keyboard → VCO → VCA + ADSR → Output.",
+      "name": "Sintetizador b\u00e1sico",
+      "description": "Keyboard \u2192 VCO \u2192 VCA + ADSR \u2192 Output.",
       "file": "basic-synth.json"
     },
     {
       "id": "filtered",
       "name": "Con filtro (VCF)",
-      "description": "Básico + VCF.",
+      "description": "B\u00e1sico + VCF.",
       "file": "filtered.json"
     },
     {
       "id": "lfo-mod",
-      "name": "Modulación LFO",
-      "description": "LFO → cutoff.",
+      "name": "Modulaci\u00f3n LFO",
+      "description": "LFO \u2192 cutoff.",
       "file": "lfo-mod.json"
     },
     {
       "id": "sequencer",
       "name": "Secuenciador",
-      "description": "Sequencer → synth.",
+      "description": "Sequencer \u2192 synth.",
       "file": "sequencer.json"
     },
     {
@@ -32,20 +32,20 @@
     },
     {
       "id": "noise-perc",
-      "name": "Percusión noise",
+      "name": "Percusi\u00f3n noise",
       "description": "Noise + VCF + ADSR corto.",
       "file": "noise-perc.json"
     },
     {
       "id": "poly-2voices",
-      "name": "Polifonía 2 voces",
+      "name": "Polifon\u00eda 2 voces",
       "description": "Voices + 2 cadenas.",
       "file": "poly-2voices.json"
     },
     {
       "id": "additive",
       "name": "Additive Fourier",
-      "description": "Síntesis aditiva con parciales.",
+      "description": "S\u00edntesis aditiva con parciales.",
       "file": "additive.json"
     },
     {
@@ -75,8 +75,13 @@
     {
       "id": "arp-synth",
       "name": "Arpegiador",
-      "description": "Arp → VCO → VCA.",
+      "description": "Arp \u2192 VCO \u2192 VCA.",
       "file": "arp-synth.json"
+    },
+    {
+      "file": "polysynth-6.json",
+      "name": "PolySynth 6 voces",
+      "description": "Sustractivo polif\u00f3nico \u00b7 teclado PC / MIDI"
     }
   ]
 }
